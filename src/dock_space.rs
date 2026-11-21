@@ -998,17 +998,17 @@ impl<Tab> DockSpace<Tab> {
             after: origin.after,
             index,
         };
-        let target = if self.has_dock(&origin.dock) {
+        let target = if self.dock(&origin.dock).is_some() {
             Some((origin.dock.clone(), Some(near(&origin, Some(index)))))
         } else if let Some(from) = float_origin
             .as_ref()
-            .filter(|from| self.has_dock(&from.dock))
+            .filter(|from| self.dock(&from.dock).is_some())
         {
             Some((from.dock.clone(), Some(near(from, None))))
         } else {
             self.docks
                 .iter()
-                .find(|dock| !dock.floating)
+                .find(|dock| !dock.floating && self.dock(&dock.name).is_some())
                 .map(|dock| (dock.name.clone(), None))
         };
         let Some((dock, near)) = target else {
@@ -1498,6 +1498,22 @@ mod detach_tests {
         let (tab, place) = space.take_with_place(Id::new("first"), id).unwrap();
         assert_eq!(tab, "first");
         space.remove_dock("original").unwrap();
+        assert_eq!(space.restore_at(tab, place, id).unwrap(), "fallback");
+        assert!(space.dock("fallback").unwrap().find_tab(&"first").is_some());
+    }
+
+    #[test]
+    fn restore_skips_registered_docks_with_missing_surfaces() {
+        let mut space = DockSpace::new();
+        let original = space.add_dock("original", DockRules::default(), vec!["first"]);
+        space.add_dock("fallback", DockRules::default(), vec!["existing"]);
+        let (tab, place) = space.take_with_place(Id::new("first"), id).unwrap();
+
+        // A registered dock can become unusable when its surface was taken
+        // independently. Restoration must select a real destination tree.
+        space.state.take_surface(original).unwrap();
+        assert!(space.has_dock("original"));
+        assert!(space.dock("original").is_none());
         assert_eq!(space.restore_at(tab, place, id).unwrap(), "fallback");
         assert!(space.dock("fallback").unwrap().find_tab(&"first").is_some());
     }

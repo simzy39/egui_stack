@@ -998,17 +998,24 @@ impl<Tab> DockSpace<Tab> {
             after: origin.after,
             index,
         };
-        let target = if self.dock(&origin.dock).is_some() {
+        // A dock name is not a usable restoration destination unless its
+        // registered surface still resolves to a dock tree.
+        let usable = |name: &str| {
+            self.dock_surface(name)
+                .and_then(|surface| self.state.get_surface(surface))
+                .is_some_and(|surface| matches!(surface, Surface::Main(_)))
+        };
+        let target = if usable(&origin.dock) {
             Some((origin.dock.clone(), Some(near(&origin, Some(index)))))
         } else if let Some(from) = float_origin
             .as_ref()
-            .filter(|from| self.dock(&from.dock).is_some())
+            .filter(|from| usable(&from.dock))
         {
             Some((from.dock.clone(), Some(near(from, None))))
         } else {
             self.docks
                 .iter()
-                .find(|dock| !dock.floating && self.dock(&dock.name).is_some())
+                .find(|dock| !dock.floating && usable(&dock.name))
                 .map(|dock| (dock.name.clone(), None))
         };
         let Some((dock, near)) = target else {

@@ -503,6 +503,9 @@ impl<Tab> DockState<Tab> {
         let leaf = self.leaf_mut(src).expect("validated source leaf");
         let active = leaf.active.0.min(leaf.tabs.len() - 1);
         let tabs = std::mem::take(&mut leaf.tabs);
+        // Splitting the root relocates its old contents into a child. If
+        // that root contains the emptied source, cleanup must follow it.
+        let mut cleanup_source = src;
         match dst {
             TabDestination::Window(rect) => {
                 let surface = self.add_window(tabs);
@@ -524,7 +527,11 @@ impl<Tab> DockState<Tab> {
                     if let Some(leaf) = node.get_leaf_mut() {
                         leaf.active = TabIndex(active);
                     }
-                    self[d.surface].split(d.node, split, 0.5, node);
+                    let [old_node, _new_node] =
+                        self[d.surface].split(d.node, split, 0.5, node);
+                    if d == cleanup_source {
+                        cleanup_source.node = old_node;
+                    }
                 }
                 TabInsert::Insert(_) | TabInsert::Append => {
                     let leaf = self.leaf_mut(d).expect("validated destination leaf");
@@ -547,7 +554,7 @@ impl<Tab> DockState<Tab> {
                 self.surfaces[surface.0] = SurfaceSlot::new(Surface::Main(tree));
             }
         }
-        self.cleanup_moved_source(src);
+        self.cleanup_moved_source(cleanup_source);
         true
     }
 
@@ -1467,6 +1474,27 @@ mod test {
         assert_eq!(dock.current_surface_identity(main), Some(main_id));
         assert_eq!(dock.current_surface_identity(other), Some(other_id));
         assert_eq!(dock.find_tab(&"a").unwrap().surface, main);
+    }
+
+    #[test]
+    fn moving_group_to_split_preserves_destination_and_removes_source_leaf() {
+        let mut dock = DockState::new(vec!["a", "b"]);
+        let [left, right] = dock
+            .main_surface_mut()
+            .split_right(NodeIndex::root(), 0.5, vec!["c", "d"]);
+        let main = SurfaceIndex::main();
+        let source = NodePath::new(main, right);
+        let target = NodePath::new(main, left);
+
+        assert!(dock.move_node(source, TabDestination::Node(
+            target,
+            TabInsert::Split(Split::Right),
+        )));
+        assert_eq!(dock.iter_all_tabs().count(), 4);
+        assert!(dock.find_tab(&"a").is_some());
+        assert!(dock.find_tab(&"b").is_some());
+        assert!(dock.find_tab(&"c").is_some());
+        assert!(dock.find_tab(&"d").is_some());
     }
 
     #[test]

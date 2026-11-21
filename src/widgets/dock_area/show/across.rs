@@ -46,9 +46,14 @@ impl<Tab> DockArea<'_, Tab> {
             .as_ref()
             .and_then(|space| space.floating.session.as_ref())
             .map(|session| session.payload);
-        if session_source
-            .is_some_and(|source| !self.drag_source_valid(source, tab_viewer))
+        if let Some(invalid_source) =
+            session_source.filter(|source| !self.drag_source_valid(*source, tab_viewer))
         {
+            // The invalid session may already have populated this viewport's preview.
+            // Do not let that stale preview recreate the cancelled session below.
+            if drag_data.as_ref().is_some_and(|drag| drag.source == invalid_source) {
+                *drag_data = None;
+            }
             if let Some(space) = self.space.as_mut() {
                 space.floating.session = None;
             }
@@ -320,10 +325,9 @@ impl<Tab> DockArea<'_, Tab> {
                 if surface.is_none_or(|surface| {
                     self.dock_state.is_window(surface) || self.is_float_dock(surface)
                 }) {
-                    let may = match src {
-                        TreeComponent::Tab(path) => self.may_float(path, tab_viewer),
-                        TreeComponent::Node(path) => self.node_may_float(path, tab_viewer),
-                        TreeComponent::Surface(_) => false,
+                    let may = match source {
+                        DragSource::Tab { path, .. } => self.may_float(path, tab_viewer),
+                        DragSource::Group(path) => self.node_may_float(path, tab_viewer),
                     };
                     if !may {
                         return;
@@ -364,10 +368,9 @@ impl<Tab> DockArea<'_, Tab> {
             return;
         }
         let src = source.component();
-        let may = match src {
-            TreeComponent::Tab(path) => self.may_float(path, tab_viewer),
-            TreeComponent::Node(path) => self.node_may_float(path, tab_viewer),
-            TreeComponent::Surface(_) => false,
+        let may = match source {
+            DragSource::Tab { path, .. } => self.may_float(path, tab_viewer),
+            DragSource::Group(path) => self.node_may_float(path, tab_viewer),
         };
         // Outside the floats' work area: refused, or torn out to a native window.
         let Some(host) = self.release_host(rect.min) else {
@@ -484,7 +487,7 @@ impl<Tab> DockArea<'_, Tab> {
                     leaf.tab_bar_hidden = false;
                 }
             }
-            TreeComponent::Surface(_) => return false,
+            TreeComponent::Surface(_) => unreachable!("drag sources cannot be surfaces"),
         }
         true
     }
@@ -651,7 +654,10 @@ mod tests {
                 let src = if group {
                     DragSource::Group(path)
                 } else {
-                    DragSource::Tab { path: TabPath::new(main, NodeIndex::root(), TabIndex(0)), id: Id::unique("restricted") }
+                    DragSource::Tab {
+                        path: TabPath::new(main, NodeIndex::root(), TabIndex(0)),
+                        id: Id::unique("restricted"),
+                    }
                 };
                 let mut viewer = Viewer { allow_windows };
                 let mut area = DockArea::dock(&mut space, "main");
@@ -677,6 +683,51 @@ mod tests {
                 assert_eq!(tabs.contains(&"allowed"), group && allow_windows);
             }
         }
+    }
+
+
+    #[test]
+    fn retained_tab_identity_rejects_replacement_at_same_position() {
+        let mut dock = DockState::new(vec!["first", "second"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let source = DragSource::Tab {
+            path: TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(0)),
+            id: Id::unique("first"),
+        };
+        let mut viewer = Viewer { allow_windows: true };
+        let mut area = DockArea::new(&mut dock);
+        assert!(area.drag_source_valid(source, &mut viewer));
+        area.dock_state.leaf_mut(root).unwrap().tabs[0] = "replacement";
+        assert!(!area.drag_source_valid(source, &mut viewer));
+    }
+
+    #[test]
+    fn retained_tab_identity_rejects_reordering_but_not_appending() {
+        let mut dock = DockState::new(vec!["first", "second"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let source = DragSource::Tab {
+            path: TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(0)),
+            id: Id::unique("first"),
+        };
+        let mut viewer = Viewer { allow_windows: true };
+        let mut area = DockArea::new(&mut dock);
+        area.dock_state.leaf_mut(root).unwrap().append_tab("third");
+        assert!(area.drag_source_valid(source, &mut viewer));
+        area.dock_state.leaf_mut(root).unwrap().tabs.swap(0, 1);
+        assert!(!area.drag_source_valid(source, &mut viewer));
+    }
+
+    #[test]
+    fn retained_group_source_rejects_empty_and_missing_leaves() {
+        let mut dock = DockState::new(vec!["first"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let missing = NodePath::new(SurfaceIndex::main(), NodeIndex(100));
+        let mut viewer = Viewer { allow_windows: true };
+        let mut area = DockArea::new(&mut dock);
+        assert!(area.drag_source_valid(DragSource::Group(root), &mut viewer));
+        assert!(!area.drag_source_valid(DragSource::Group(missing), &mut viewer));
+        area.dock_state.leaf_mut(root).unwrap().tabs.clear();
+        assert!(!area.drag_source_valid(DragSource::Group(root), &mut viewer));
     }
 
     #[test]

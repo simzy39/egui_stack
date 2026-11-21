@@ -78,7 +78,6 @@ impl DragSource {
             Self::Group(path) => TreeComponent::Node(path),
         }
     }
-
 }
 
 #[derive(Debug, Clone, PartialEq)]

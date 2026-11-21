@@ -279,7 +279,10 @@ impl<Tab> DockArea<'_, Tab> {
             .as_ref()
             .is_some_and(|drag: &DragData| !self.drag_source_valid(drag.source, tab_viewer))
         {
-            if drag_data.as_ref().is_some_and(|drag| matches!(drag.source, DragSource::Tab { .. })) {
+            if drag_data
+                .as_ref()
+                .is_some_and(|drag| matches!(drag.source, DragSource::Tab { .. }))
+            {
                 self.cancel_tab_drag(ui, state);
             }
             drag_data = None;

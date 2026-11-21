@@ -69,6 +69,9 @@ pub(crate) struct Report {
     /// Structural identity of the destination node, captured when this report was made.
     /// None for empty surfaces, windows and non-drop outcomes.
     pub(crate) destination_identity: Option<DestinationIdentity>,
+    /// Ordered tab identities when a numeric insertion position was reported.
+    /// A changed order invalidates the positional insertion instead of retargeting it.
+    pub(crate) insertion_order: Option<Vec<egui::Id>>,
     /// The zone to unfold once the tab lands (a strip or a restore band of the main window).
     pub(crate) unfold: Option<ZoneName>,
 }

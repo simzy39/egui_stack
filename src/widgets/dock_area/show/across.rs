@@ -271,6 +271,14 @@ impl<Tab> DockArea<'_, Tab> {
             }
             _ => None,
         };
+        let insertion_order = match &outcome {
+            Outcome::Drop(TabDestination::Node(path, TabInsert::Insert(_))) => self
+                .dock_state
+                .leaf_mut(*path)
+                .ok()
+                .map(|leaf| leaf.tabs.iter_mut().map(|tab| tab_viewer.id(tab)).collect()),
+            _ => None,
+        };
         let Some(space) = self.space.as_mut() else {
             return;
         };
@@ -287,6 +295,7 @@ impl<Tab> DockArea<'_, Tab> {
                     rank,
                     outcome,
                     destination_identity,
+                    insertion_order,
                     unfold,
                 },
             );
@@ -304,6 +313,7 @@ impl<Tab> DockArea<'_, Tab> {
             rank,
             outcome,
             destination_identity,
+            insertion_order,
             unfold,
         };
         self.release_over(report, source, rect, tab_viewer);
@@ -330,6 +340,10 @@ impl<Tab> DockArea<'_, Tab> {
                 if !self.reported_destination_identity_valid(
                     &destination,
                     report.destination_identity.as_ref(),
+                ) || !self.reported_insertion_order_valid(
+                    &destination,
+                    report.insertion_order.as_deref(),
+                    tab_viewer,
                 ) || !self.destination_valid(&destination)
                 {
                     return;
@@ -519,6 +533,32 @@ impl<Tab> DockArea<'_, Tab> {
             }),
             // Non-node destinations have no node identity to validate.
             _ => identity.is_none(),
+        }
+    }
+
+    /// A positional insertion is valid only against the tab order it was previewed in.
+    /// Append and split operations do not depend on an existing insertion index.
+    fn reported_insertion_order_valid(
+        &mut self,
+        destination: &TabDestination,
+        reported: Option<&[egui::Id]>,
+        tab_viewer: &mut impl TabViewer<Tab = Tab>,
+    ) -> bool {
+        match destination {
+            TabDestination::Node(path, TabInsert::Insert(_)) => {
+                let Some(reported) = reported else {
+                    return false;
+                };
+                self.dock_state.leaf_mut(*path).is_ok_and(|leaf| {
+                    leaf.tabs.len() == reported.len()
+                        && leaf
+                            .tabs
+                            .iter_mut()
+                            .map(|tab| tab_viewer.id(tab))
+                            .eq(reported.iter().copied())
+                })
+            }
+            _ => reported.is_none(),
         }
     }
 
@@ -790,6 +830,7 @@ mod tests {
                             TabInsert::Append,
                         )),
                         destination_identity,
+                        insertion_order: None,
                         unfold: None,
                     },
                     src,
@@ -972,6 +1013,7 @@ mod tests {
                 rank: 0,
                 outcome: Outcome::Drop(destination),
                 destination_identity,
+                insertion_order: None,
                 unfold: None,
             },
             source,
@@ -1009,6 +1051,7 @@ mod tests {
                     TabInsert::Append,
                 )),
                 destination_identity: Some(target_identity),
+                insertion_order: None,
                 unfold: None,
             },
             source,
@@ -1162,6 +1205,7 @@ mod tests {
                 rank: 0,
                 outcome: Outcome::Drop(TabDestination::Node(target_path, TabInsert::Append)),
                 destination_identity,
+                insertion_order: None,
                 unfold: None,
             },
             source,
@@ -1199,6 +1243,7 @@ mod tests {
                 rank: 0,
                 outcome: Outcome::Drop(TabDestination::Node(target_path, TabInsert::Append)),
                 destination_identity,
+                insertion_order: None,
                 unfold: None,
             },
             source,
@@ -1251,6 +1296,7 @@ mod tests {
                     TabInsert::Append,
                 )),
                 destination_identity,
+                insertion_order: None,
                 unfold: None,
             },
             session.payload,

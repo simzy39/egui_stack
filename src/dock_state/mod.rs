@@ -391,8 +391,8 @@ impl<Tab> DockState<Tab> {
         // Destination validity is checked before consuming source tabs.
         // This also protects against any future destination variants whose
         // target cannot be resolved as a mutable leaf.
-        if let TabDestination::Node(path, TabInsert::Insert(_) | TabInsert::Append) = dst {
-            if self.leaf(path).is_err() {
+        if let TabDestination::Node(path, TabInsert::Insert(_) | TabInsert::Append) = &dst {
+            if self.leaf(*path).is_err() {
                 return false;
             }
         }

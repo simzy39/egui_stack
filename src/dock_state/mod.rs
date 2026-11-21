@@ -445,12 +445,9 @@ impl<Tab> DockState<Tab> {
     /// floating surface. Called only after the destination has received the tabs.
     fn cleanup_moved_source(&mut self, source: NodePath) {
         if self.leaf(source).is_ok_and(|leaf| leaf.tabs.is_empty()) {
-            self[source.surface].remove_leaf(source.node);
-        }
-        if self.is_window(source.surface)
-            && self.get_surface(source.surface).is_some_and(Surface::is_empty)
-        {
-            self.remove_surface(source.surface);
+            // The checked public operation also removes a floating surface
+            // when its final leaf disappears.
+            self.remove_leaf(source);
         }
     }
 

@@ -1290,9 +1290,14 @@ impl<Tab> Tree<Tab> {
     pub fn arrange_as_linear(&mut self, node: NodeIndex, dir: LinearDir) -> bool {
         let linear = match self.nodes.get(node.0) {
             Some(Node::Linear(linear)) => {
-                let mut linear = linear.clone();
-                linear.dir = dir;
-                linear
+                let mut updated = linear.clone();
+                // Reconfiguring the same container must not invalidate a retained
+                // destination report. Changing orientation does change its identity.
+                if linear.dir == dir {
+                    updated.drag_identity = linear.drag_identity;
+                }
+                updated.dir = dir;
+                updated
             }
             Some(Node::Grid(grid)) => {
                 let shares = match dir {
@@ -1662,6 +1667,23 @@ mod test {
         assert_eq!(root.dir, LinearDir::Vertical);
         assert_eq!(root.children(), &[x, a, b, c, d]);
         assert!(close(root.shares(), &[0.5, 0.125, 0.125, 0.125, 0.125]));
+    }
+
+    #[test]
+    fn arranging_linear_container_preserves_identity_only_for_same_direction() {
+        let (mut tree, _) = row();
+        let root = NodeIndex::root();
+        let original = tree[root].get_linear_mut().unwrap().ensure_drag_identity();
+
+        assert!(tree.arrange_as_linear(root, LinearDir::Horizontal));
+        assert_eq!(tree[root].get_linear().unwrap().drag_identity, original);
+
+        assert!(tree.arrange_as_linear(root, LinearDir::Vertical));
+        assert_eq!(tree[root].get_linear().unwrap().drag_identity, 0);
+        assert_ne!(
+            tree[root].get_linear_mut().unwrap().ensure_drag_identity(),
+            original,
+        );
     }
 
     #[test]

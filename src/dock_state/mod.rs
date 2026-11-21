@@ -1489,6 +1489,59 @@ mod test {
     }
 
     #[test]
+    fn moving_last_tab_across_surfaces_removes_empty_source_window() {
+        let mut dock = DockState::new(vec!["main"]);
+        let source_surface = dock.add_window(vec!["moving"]);
+        let source = TabPath::new(source_surface, NodeIndex::root(), TabIndex(0));
+        let destination = NodePath::MAIN_ROOT;
+
+        assert!(dock.move_tab(
+            source,
+            TabDestination::Node(destination, TabInsert::Append),
+        ));
+        assert_eq!(dock.leaf(destination).unwrap().tabs, ["main", "moving"]);
+        assert!(dock.get_surface(source_surface).is_none_or(Surface::is_empty));
+        assert_eq!(dock.iter_all_tabs().count(), 2);
+    }
+
+    #[test]
+    fn moving_last_group_across_surfaces_removes_empty_source_window() {
+        let mut dock = DockState::new(vec!["main"]);
+        let source_surface = dock.add_window(vec!["moving", "other"]);
+        let source = NodePath::new(source_surface, NodeIndex::root());
+        let destination = NodePath::MAIN_ROOT;
+
+        assert!(dock.move_node(
+            source,
+            TabDestination::Node(destination, TabInsert::Append),
+        ));
+        assert_eq!(
+            dock.leaf(destination).unwrap().tabs,
+            ["main", "moving", "other"],
+        );
+        assert!(dock.get_surface(source_surface).is_none_or(Surface::is_empty));
+        assert_eq!(dock.iter_all_tabs().count(), 3);
+    }
+
+    #[test]
+    fn splitting_source_leaf_with_one_of_multiple_tabs_preserves_both_groups() {
+        let mut dock = DockState::new(vec!["a", "b", "c"]);
+        let root = NodePath::MAIN_ROOT;
+        assert!(dock.move_tab(
+            TabPath::new(root.surface, root.node, TabIndex(1)),
+            TabDestination::Node(root, TabInsert::Split(Split::Right)),
+        ));
+        assert_eq!(dock.iter_all_tabs().count(), 3);
+        let a = dock.find_tab(&"a").unwrap().node_path();
+        let b = dock.find_tab(&"b").unwrap().node_path();
+        let c = dock.find_tab(&"c").unwrap().node_path();
+        assert_eq!(a, c);
+        assert_ne!(a, b);
+        assert_eq!(dock.leaf(a).unwrap().tabs, ["a", "c"]);
+        assert_eq!(dock.leaf(b).unwrap().tabs, ["b"]);
+    }
+
+    #[test]
     fn invalid_group_move_does_not_detach_source_or_invalidate_identities() {
         let mut dock = DockState::new(vec!["a", "b"]);
         let other = dock.add_window(vec!["c"]);

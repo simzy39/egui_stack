@@ -241,6 +241,10 @@ impl BodyLeaf {
         pass: u64,
         request: (Option<DragSource>, Id),
     ) {
+        // An invalid handle cannot reserve the first-request slot.
+        if request.0.is_none() {
+            return;
+        }
         if !data
             .get_temp::<(u64, Option<DragSource>, Id)>(key)
             .is_some_and(|(stored_pass, _, _)| stored_pass == pass)
@@ -284,6 +288,13 @@ impl BodyLeaf {
 mod custom_handle_request_tests {
     use super::*;
 
+    fn source() -> DragSource {
+        DragSource::Group {
+            path: NodePath::new(crate::SurfaceIndex::main(), crate::NodeIndex::root()),
+            id: 123,
+        }
+    }
+
     #[test]
     fn press_and_activation_requests_are_independent_and_area_scoped() {
         use crate::{NodeIndex, SurfaceIndex};
@@ -317,19 +328,17 @@ mod custom_handle_request_tests {
     }
 
     #[test]
-    fn request_without_a_source_cannot_be_consumed() {
-        use crate::{NodeIndex, SurfaceIndex};
+    fn invalid_source_does_not_reserve_a_request_slot() {
         let ctx = Context::default();
         let key = BodyLeaf::press_id(Id::new("dock"));
-        let path = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let valid = Id::new("valid");
         ctx.data_mut(|data| {
             BodyLeaf::retain_first_request(data, key, 5, (None, Id::new("invalid")));
-            assert_eq!(BodyLeaf::take_request_for_leaf(data, key, 5, path), None);
-            assert!(data.get_temp::<(u64, Option<DragSource>, Id)>(key).is_some());
-            BodyLeaf::retain_first_request(data, key, 6, (None, Id::new("next")));
+            assert_eq!(data.get_temp::<(u64, Option<DragSource>, Id)>(key), None);
+            BodyLeaf::retain_first_request(data, key, 5, (Some(source()), valid));
             assert_eq!(
-                data.get_temp::<(u64, Option<DragSource>, Id)>(key),
-                Some((6, None, Id::new("next"))),
+                data.remove_temp::<(u64, Option<DragSource>, Id)>(key),
+                Some((5, Some(source()), valid)),
             );
         });
     }
@@ -363,12 +372,12 @@ mod custom_handle_request_tests {
         let second = Id::new("second-handle");
         for key in [BodyLeaf::press_id(area), BodyLeaf::request_id(area)] {
             ctx.data_mut(|data| {
-                BodyLeaf::retain_first_request(data, key, 10, (None, first));
-                BodyLeaf::retain_first_request(data, key, 10, (None, second));
+                BodyLeaf::retain_first_request(data, key, 10, (Some(source()), first));
+                BodyLeaf::retain_first_request(data, key, 10, (Some(source()), second));
             });
             assert_eq!(
                 ctx.data_mut(|data| data.remove_temp::<(u64, Option<DragSource>, Id)>(key)),
-                Some((10, None, first)),
+                Some((10, Some(source()), first)),
             );
         }
     }
@@ -383,13 +392,13 @@ mod custom_handle_request_tests {
             BodyLeaf::request_id(Id::new("dock")),
         ] {
             ctx.data_mut(|data| {
-                BodyLeaf::retain_first_request(data, key, 10, (None, first));
-                BodyLeaf::retain_first_request(data, key, 11, (None, second));
-                BodyLeaf::retain_first_request(data, key, 11, (None, first));
+                BodyLeaf::retain_first_request(data, key, 10, (Some(source()), first));
+                BodyLeaf::retain_first_request(data, key, 11, (Some(source()), second));
+                BodyLeaf::retain_first_request(data, key, 11, (Some(source()), first));
             });
             assert_eq!(
                 ctx.data_mut(|data| data.remove_temp::<(u64, Option<DragSource>, Id)>(key)),
-                Some((11, None, second)),
+                Some((11, Some(source()), second)),
             );
         }
     }
@@ -430,11 +439,11 @@ mod custom_handle_request_tests {
         let key = BodyLeaf::press_id(Id::new("dock"));
         let handle = Id::new("handle");
         ctx.data_mut(|data| {
-            BodyLeaf::retain_first_request(data, key, 10, (None, handle));
+            BodyLeaf::retain_first_request(data, key, 10, (Some(source()), handle));
             let pending = data.get_temp::<(u64, Option<DragSource>, Id)>(key);
             assert!(pending.is_some_and(|(pass, _, _)| pass == 10));
             assert!(!pending.is_some_and(|(pass, _, _)| pass == 11));
-            BodyLeaf::retain_first_request(data, key, 11, (None, handle));
+            BodyLeaf::retain_first_request(data, key, 11, (Some(source()), handle));
             assert_eq!(
                 data.remove_temp::<(u64, Option<DragSource>, Id)>(key),
                 Some((11, None, handle)),
@@ -449,15 +458,15 @@ mod custom_handle_request_tests {
         let first = Id::new("first-handle");
         let second = Id::new("second-handle");
         ctx.data_mut(|data| {
-            BodyLeaf::retain_first_request(data, key, 10, (None, first));
+            BodyLeaf::retain_first_request(data, key, 10, (Some(source()), first));
             assert_eq!(
                 data.remove_temp::<(u64, Option<DragSource>, Id)>(key),
-                Some((10, None, first)),
+                Some((10, Some(source()), first)),
             );
-            BodyLeaf::retain_first_request(data, key, 10, (None, second));
+            BodyLeaf::retain_first_request(data, key, 10, (Some(source()), second));
             assert_eq!(
                 data.remove_temp::<(u64, Option<DragSource>, Id)>(key),
-                Some((10, None, second)),
+                Some((10, Some(source()), second)),
             );
         });
     }

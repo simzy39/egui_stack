@@ -22,7 +22,7 @@ use egui::{Pos2, Rect, ViewportId};
 
 use super::drag_and_drop::DragSource;
 use crate::layout::ZoneName;
-use crate::{TabDestination, TabPath};
+use crate::{NodePath, TabDestination, TabPath};
 
 /// How many passes of the source a drag released outside its window waits for another viewport
 /// to see the pointer over one of its docks, where the system hides window positions: about a

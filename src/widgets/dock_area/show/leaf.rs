@@ -5,7 +5,7 @@ use egui::{
     vec2,
 };
 
-use crate::NodePath;
+use crate::{NodePath, TabPath};
 use crate::dock_area::BodyLeaf;
 use crate::dock_area::tab_removal::{ForcedRemoval, TabRemoval};
 use crate::node::LeafNode;

@@ -2,7 +2,7 @@
 
 use egui::{Id, Rect, ViewportId};
 
-use crate::floats::{FloatEvent, Floating, PendingFloat, WindowMove};
+use crate::floats::{FloatEvent, Floating, PendingFloat};
 use crate::layout::{
     Content, Drops, Fold, Laid, LaidZone, Layout, Restore, Shown, Zone, ZoneKind, ZoneName,
 };

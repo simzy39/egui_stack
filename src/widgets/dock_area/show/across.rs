@@ -12,7 +12,7 @@ use super::super::{
 use crate::dock_space::{TabOrigin, dock_name};
 use crate::layout::ZoneName;
 use crate::{
-    DockArea, Surface, TabDestination, TabIndex, TabInsert, TabPath, TabViewer, WindowOutlinePaint,
+    DockArea, NodePath, TabDestination, TabIndex, TabInsert, TabPath, TabViewer, WindowOutlinePaint,
 };
 
 /// Origin changes staged before mutation and applied only after a successful move.

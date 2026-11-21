@@ -22,6 +22,7 @@ use egui::{Context, Id, Modifiers, Response, Ui, emath::*};
 pub use labels::Labels;
 pub use session::{DragPayload, SpaceDrag};
 use tab_removal::TabRemoval;
+use drag_and_drop::DragSource;
 
 use crate::{
     DockPainter, DockSpace, NodePath, Style, StylePainter, TabIndex, TabPath,

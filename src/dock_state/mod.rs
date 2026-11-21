@@ -1074,6 +1074,29 @@ mod test {
     }
 
     #[test]
+    fn moving_group_into_split_of_ancestor_preserves_every_tab() {
+        let mut dock = DockState::new(vec!["first", "second"]);
+        let [left, _right] = dock.main_surface_mut().split_right(
+            NodeIndex::root(), 0.5, vec!["other"],
+        );
+        let source = NodePath::new(SurfaceIndex::main(), left);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        dock.leaf_mut(source).unwrap().active = TabIndex(1);
+
+        assert!(dock.move_node(
+            source,
+            TabDestination::Node(root, TabInsert::Split(crate::Split::Below)),
+        ));
+        for name in ["first", "second", "other"] {
+            assert!(dock.find_tab(&name).is_some(), "lost tab: {name}");
+        }
+        let moved = dock.find_tab(&"second").unwrap().node_path();
+        let leaf = dock.leaf(moved).unwrap();
+        assert_eq!(leaf.tabs, ["first", "second"]);
+        assert_eq!(leaf.active, TabIndex(1));
+    }
+
+    #[test]
     fn splitting_another_leaf_keeps_source_cleanup_and_destination_intact() {
         let mut dock = DockState::new(vec!["source"]);
         let [left, right] = dock.main_surface_mut().split_right(

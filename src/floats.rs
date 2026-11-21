@@ -1768,6 +1768,9 @@ mod viewport_lifecycle_tests {
             stamp: 3,
             rank: 1,
             outcome: Outcome::Refused,
+            destination_identity: None,
+            destination_surface_identity: None,
+            insertion_order: None,
             unfold: None,
         });
         space.floating.session = Some(active);
@@ -1797,6 +1800,9 @@ mod viewport_lifecycle_tests {
             stamp: 4,
             rank: 1,
             outcome: Outcome::Refused,
+            destination_identity: None,
+            destination_surface_identity: None,
+            insertion_order: None,
             unfold: None,
         });
         floating.session = Some(active);
@@ -1817,6 +1823,9 @@ mod viewport_lifecycle_tests {
             stamp: 2,
             rank: 1,
             outcome: Outcome::Refused,
+            destination_identity: None,
+            destination_surface_identity: None,
+            insertion_order: None,
             unfold: None,
         });
         floating.session = Some(active);
@@ -1837,6 +1846,9 @@ mod viewport_lifecycle_tests {
             stamp: 6,
             rank: 1,
             outcome: Outcome::Refused,
+            destination_identity: None,
+            destination_surface_identity: None,
+            insertion_order: None,
             unfold: None,
         });
         floating.session = Some(active);
@@ -1857,6 +1869,9 @@ mod viewport_lifecycle_tests {
             stamp: u64::MAX,
             rank: 1,
             outcome: Outcome::Refused,
+            destination_identity: None,
+            destination_surface_identity: None,
+            insertion_order: None,
             unfold: None,
         });
         floating.session = Some(active);

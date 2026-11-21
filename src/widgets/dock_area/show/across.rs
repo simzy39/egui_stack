@@ -760,7 +760,7 @@ impl<Tab> DockArea<'_, Tab> {
         src: &TreeComponent,
         tab_viewer: &impl TabViewer<Tab = Tab>,
     ) {
-        if !self.source_valid(src) {
+        if !self.component_exists(src) {
             return;
         }
         let may_float = match *src {

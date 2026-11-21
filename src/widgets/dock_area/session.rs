@@ -101,6 +101,15 @@ pub(crate) enum Outcome {
 }
 
 impl DragSession {
+    /// Only a retained group can be authenticated without a TabViewer.
+    /// A tab drag must be restarted after replacing its owning DockSpace.
+    pub(crate) fn source_in(&self, state: &crate::DockState<impl Sized>) -> bool {
+        match self.payload {
+            DragSource::Group { path, id } => id != 0 && state.leaf(path).is_ok_and(|leaf| leaf.drag_identity == id && !leaf.tabs.is_empty()),
+            DragSource::Tab { .. } => false,
+        }
+    }
+
     /// A session for a payload dragged in the source viewport.
     pub(crate) fn new(
         payload: DragSource,

@@ -232,6 +232,9 @@ mod recency_tests {
             stamp: u64::MAX,
             rank: 1,
             outcome: Outcome::Refused,
+            destination_identity: None,
+            destination_surface_identity: None,
+            insertion_order: None,
             unfold: None,
         });
         assert!(drag.remote(0).is_some());
@@ -247,12 +250,18 @@ mod recency_tests {
             stamp: 5,
             rank: 100,
             outcome: Outcome::Refused,
+            destination_identity: None,
+            destination_surface_identity: None,
+            insertion_order: None,
             unfold: None,
         });
         drag.reports.insert(ViewportId::from_hash_of("future"), Report {
             stamp: 6,
             rank: 50,
             outcome: Outcome::Refused,
+            destination_identity: None,
+            destination_surface_identity: None,
+            insertion_order: None,
             unfold: None,
         });
         assert!(drag.remote(0).is_none());
@@ -268,6 +277,9 @@ mod recency_tests {
             stamp: 2,
             rank: 1,
             outcome: Outcome::Refused,
+            destination_identity: None,
+            destination_surface_identity: None,
+            insertion_order: None,
             unfold: None,
         });
         assert!(drag.remote(0).is_none());

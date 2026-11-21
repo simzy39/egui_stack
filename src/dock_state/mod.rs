@@ -1322,13 +1322,13 @@ mod test {
             TabPath::new(SurfaceIndex::main(), NodeIndex(999), TabIndex(0)),
             TabPath::new(SurfaceIndex(999), NodeIndex::root(), TabIndex(0)),
         ] {
-            assert!(!dock.move_tab(path, window));
+            assert!(!dock.move_tab(path, window.clone()));
         }
         for path in [
             NodePath::new(SurfaceIndex::main(), NodeIndex(999)),
             NodePath::new(SurfaceIndex(999), NodeIndex::root()),
         ] {
-            assert!(!dock.move_node(path, window));
+            assert!(!dock.move_node(path, window.clone()));
         }
         assert_eq!(dock.surfaces.len(), surfaces_before);
         assert_eq!(dock.leaf(root).unwrap().tabs, ["first", "second"]);

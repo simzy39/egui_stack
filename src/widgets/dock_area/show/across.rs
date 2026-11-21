@@ -654,13 +654,13 @@ impl<Tab> DockArea<'_, Tab> {
         });
         match src {
             TreeComponent::Node(path) => {
-                if !self.dock_state.move_node(path, destination) {
+                if !self.dock_state.move_node(path, destination.clone()) {
                     return false;
                 }
             },
             TreeComponent::Tab(path) => {
                 let count = self.dock_state[path.node_path()].tabs_count();
-                if !self.dock_state.move_tab(path, destination) {
+                if !self.dock_state.move_tab(path, destination.clone()) {
                     return false;
                 }
                 // Unhide the tab bar on the source leaf when a tab is dragged out.

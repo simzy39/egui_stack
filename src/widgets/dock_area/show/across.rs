@@ -773,9 +773,15 @@ mod tests {
         let mut area = DockArea::new(&mut dock);
         let source = area.group_drag_source(source_path).unwrap();
 
-        // Replacing the leaf at the same path must not transfer group ownership.
-        area.dock_state.leaf_mut(source_path).unwrap().drag_identity = 0;
+        // A replacement at the same path must not inherit the old drag identity.
+        // Cloning a leaf intentionally creates a fresh runtime identity.
+        let replacement = area.dock_state.leaf(source_path).unwrap().clone();
+        *area.dock_state.leaf_mut(source_path).unwrap() = replacement;
         assert!(!area.drag_source_valid(source, &mut viewer));
+        assert_ne!(
+            area.group_drag_source(source_path),
+            Some(source),
+        );
         area.release_over(
             Report {
                 stamp: 0,

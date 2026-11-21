@@ -307,6 +307,54 @@ mod custom_handle_request_tests {
     }
 
     #[test]
+    fn competing_leaves_cannot_replace_a_pending_request() {
+        use crate::{NodeIndex, SurfaceIndex};
+        let ctx = Context::default();
+        let key = BodyLeaf::request_id(Id::new("dock"));
+        let first = DragSource::Group {
+            path: NodePath::new(SurfaceIndex::main(), NodeIndex(1)),
+            id: 41,
+        };
+        let second = DragSource::Group {
+            path: NodePath::new(SurfaceIndex::main(), NodeIndex(2)),
+            id: 42,
+        };
+        let first_handle = Id::new("first");
+        let second_handle = Id::new("second");
+        ctx.data_mut(|data| {
+            BodyLeaf::retain_first_request(data, key, 10, (Some(first), first_handle));
+            BodyLeaf::retain_first_request(data, key, 10, (Some(second), second_handle));
+            assert_eq!(
+                data.get_temp::<(u64, Option<DragSource>, Id)>(key),
+                Some((10, Some(first), first_handle)),
+            );
+            BodyLeaf::retain_first_request(data, key, 11, (Some(second), second_handle));
+            assert_eq!(
+                data.remove_temp::<(u64, Option<DragSource>, Id)>(key),
+                Some((11, Some(second), second_handle)),
+            );
+        });
+    }
+
+    #[test]
+    fn stale_request_is_not_eligible_in_another_pass() {
+        let ctx = Context::default();
+        let key = BodyLeaf::press_id(Id::new("dock"));
+        let handle = Id::new("handle");
+        ctx.data_mut(|data| {
+            BodyLeaf::retain_first_request(data, key, 10, (None, handle));
+            let pending = data.get_temp::<(u64, Option<DragSource>, Id)>(key);
+            assert!(pending.is_some_and(|(pass, _, _)| pass == 10));
+            assert!(!pending.is_some_and(|(pass, _, _)| pass == 11));
+            BodyLeaf::retain_first_request(data, key, 11, (None, handle));
+            assert_eq!(
+                data.remove_temp::<(u64, Option<DragSource>, Id)>(key),
+                Some((11, None, handle)),
+            );
+        });
+    }
+
+    #[test]
     fn consumed_request_allows_next_handle_in_same_pass() {
         let ctx = Context::default();
         let key = BodyLeaf::press_id(Id::new("dock"));

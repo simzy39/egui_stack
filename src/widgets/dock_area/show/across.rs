@@ -714,6 +714,36 @@ mod tests {
     }
 
     #[test]
+    fn remote_release_cannot_move_a_replacement_group() {
+        let mut dock = DockState::new(vec!["original", "other"]);
+        dock.main_surface_mut()
+            .split_right(NodeIndex::root(), 0.5, vec!["destination"]);
+        let source_path = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
+        let target_path = NodePath::new(SurfaceIndex::main(), NodeIndex(2));
+        let rect = Rect::from_min_size(Pos2::ZERO, egui::vec2(200.0, 100.0));
+        let mut viewer = Viewer { allow_windows: true };
+        let mut area = DockArea::new(&mut dock);
+        let source = area.group_drag_source(source_path).unwrap();
+
+        // Replacing the leaf at the same path must not transfer group ownership.
+        area.dock_state.leaf_mut(source_path).unwrap().drag_identity = 0;
+        assert!(!area.drag_source_valid(source, &mut viewer));
+        area.release_over(
+            Report {
+                stamp: 0,
+                rank: 0,
+                outcome: Outcome::Drop(TabDestination::Node(target_path, TabInsert::Append)),
+                unfold: None,
+            },
+            source,
+            rect,
+            &mut viewer,
+        );
+        assert_eq!(area.dock_state.leaf(source_path).unwrap().tabs, ["original", "other"]);
+        assert_eq!(area.dock_state.leaf(target_path).unwrap().tabs, ["destination"]);
+    }
+
+    #[test]
     fn remote_release_cannot_move_a_replacement_tab() {
         let mut dock = DockState::new(vec!["original", "other"]);
         dock.main_surface_mut().split_right(

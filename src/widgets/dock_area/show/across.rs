@@ -267,7 +267,7 @@ impl<Tab> DockArea<'_, Tab> {
         let viewport = ui.ctx().viewport_id();
         let destination_surface_identity = match &outcome {
             Outcome::Drop(TabDestination::Node(path, _)) => self.dock_state.capture_surface_identity(path.surface),
-            Outcome::Drop(TabDestination::EmptySurface(_)) => None,
+            Outcome::Drop(TabDestination::EmptySurface(surface)) => self.dock_state.capture_surface_identity(*surface),
             _ => None,
         };
         let destination_identity = match &outcome {
@@ -538,7 +538,11 @@ impl<Tab> DockArea<'_, Tab> {
             TabDestination::Node(path, _) => reported.is_some_and(|identity| {
                 self.dock_state.current_surface_identity(path.surface) == Some(identity)
             }),
-            _ => reported.is_none(),
+            TabDestination::EmptySurface(surface) => reported.is_some_and(|identity| {
+                self.dock_state.current_surface_identity(*surface) == Some(identity)
+                    && self.dock_state.get_surface(*surface).is_some_and(crate::Surface::is_empty)
+            }),
+            TabDestination::Window(_) => reported.is_none(),
         }
     }
 
@@ -811,6 +815,23 @@ mod tests {
         fn allowed_in_windows(&self, tab: &mut Self::Tab) -> bool {
             self.allow_windows || *tab != "restricted"
         }
+    }
+
+    #[test]
+    fn retained_empty_surface_drop_rejects_reused_slot() {
+        let mut dock = DockState::new(vec!["source"]);
+        let vacant = dock.add_window(vec!["old"]);
+        dock.remove_surface(vacant).unwrap();
+        let mut area = DockArea::new(&mut dock);
+        let original = area.dock_state.capture_surface_identity(vacant).unwrap();
+        let destination = TabDestination::EmptySurface(vacant);
+        assert!(area.reported_surface_identity_valid(&destination, Some(original)));
+
+        let occupied = area.dock_state.add_window(vec!["replacement"]);
+        assert_eq!(occupied, vacant);
+        area.dock_state.remove_surface(occupied).unwrap();
+        assert!(area.dock_state.get_surface(vacant).is_none_or(crate::Surface::is_empty));
+        assert!(!area.reported_surface_identity_valid(&destination, Some(original)));
     }
 
     #[test]

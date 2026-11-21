@@ -42,7 +42,7 @@ use crate::{
 /// `DockState` may be serialized to record the placement of all surfaces.
 ///
 /// This does not include serialization of translations.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct DockState<Tab> {
     surfaces: Vec<Surface<Tab>>,
@@ -54,6 +54,17 @@ pub struct DockState<Tab> {
     /// Contains translations of text shown in [`DockArea`](crate::DockArea).
     #[cfg_attr(feature = "serde", serde(skip))]
     pub translations: Translations,
+}
+
+impl<Tab: Clone> Clone for DockState<Tab> {
+    fn clone(&self) -> Self {
+        Self {
+            surfaces: self.surfaces.clone(),
+            surface_identities: Vec::new(),
+            focused_surface: self.focused_surface,
+            translations: self.translations.clone(),
+        }
+    }
 }
 
 impl<Tab> ops::Index<SurfaceIndex> for DockState<Tab> {
@@ -186,9 +197,7 @@ impl<Tab> DockState<Tab> {
     /// Capture the identity of an occupied surface, assigning one on first use.
     /// Identities are runtime-only; reused indices receive new identities.
     pub(crate) fn capture_surface_identity(&mut self, index: SurfaceIndex) -> Option<u64> {
-        if !self.is_surface_valid(index) {
-            return None;
-        }
+        self.surfaces.get(index.0)?;
         if self.surface_identities.len() <= index.0 {
             self.surface_identities.resize(index.0 + 1, 0);
         }
@@ -203,10 +212,8 @@ impl<Tab> DockState<Tab> {
 
     /// Read an identity without assigning one to a replacement surface.
     pub(crate) fn current_surface_identity(&self, index: SurfaceIndex) -> Option<u64> {
-        self.is_surface_valid(index)
-            .then(|| self.surface_identities.get(index.0).copied())
-            .flatten()
-            .filter(|identity| *identity != 0)
+        self.surfaces.get(index.0)?;
+        self.surface_identities.get(index.0).copied().filter(|identity| *identity != 0)
     }
 
     fn invalidate_surface_identity(&mut self, index: SurfaceIndex) {
@@ -260,6 +267,7 @@ impl<Tab> DockState<Tab> {
     /// Get a mutable borrow to the raw surface from a surface index.
     #[inline]
     pub fn get_surface_mut(&mut self, surface: SurfaceIndex) -> Option<&mut Surface<Tab>> {
+        self.invalidate_surface_identity(surface);
         self.surfaces.get_mut(surface.0)
     }
 
@@ -847,6 +855,7 @@ impl<Tab> DockState<Tab> {
 
     /// Returns a mutable [`Iterator`] over all surfaces.
     pub fn iter_surfaces_mut(&mut self) -> impl Iterator<Item = &mut Surface<Tab>> {
+        self.surface_identities.fill(0);
         self.surfaces.iter_mut()
     }
 
@@ -854,6 +863,7 @@ impl<Tab> DockState<Tab> {
     pub fn iter_surfaces_mut_indexed(
         &mut self,
     ) -> impl Iterator<Item = (SurfaceIndex, &mut Surface<Tab>)> {
+        self.surface_identities.fill(0);
         self.surfaces
             .iter_mut()
             .enumerate()

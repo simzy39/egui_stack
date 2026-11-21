@@ -2477,7 +2477,7 @@ impl<Tab> DockArea<'_, Tab> {
                             let body = BodyLeaf {
                                 dock_area: self.id,
                                 path,
-                                draggable: self.draggable_tabs,
+                                draggable: source.is_some(),
                                 source,
                             };
                             let outer = d.get_temp::<Option<BodyLeaf>>(BodyLeaf::id()).flatten();

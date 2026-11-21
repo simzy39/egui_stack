@@ -1174,6 +1174,24 @@ mod test {
     }
 
     #[test]
+    fn removing_middle_surface_does_not_reindex_later_surfaces() {
+        let mut dock = DockState::new(vec!["main"]);
+        let first = dock.add_docked_surface(Tree::new(vec!["first"]));
+        let second = dock.add_docked_surface(Tree::new(vec!["second"]));
+        let third = dock.add_docked_surface(Tree::new(vec!["third"]));
+        dock.set_focused_node_and_surface(NodePath::new(third, NodeIndex::root()));
+        let removed = dock.remove_surface(second).unwrap();
+        assert!(removed.node_tree().is_some());
+        assert!(dock.get_surface(second).unwrap().is_empty());
+        assert_eq!(dock.leaf(NodePath::new(first, NodeIndex::root())).unwrap().tabs, ["first"]);
+        assert_eq!(dock.leaf(NodePath::new(third, NodeIndex::root())).unwrap().tabs, ["third"]);
+        assert_eq!(dock.focused_leaf().unwrap().surface, third);
+        let reused = dock.add_docked_surface(Tree::new(vec!["replacement"]));
+        assert_eq!(reused, second);
+        assert_eq!(dock.leaf(NodePath::new(third, NodeIndex::root())).unwrap().tabs, ["third"]);
+    }
+
+    #[test]
     fn removing_focused_surface_returns_focus_to_main() {
         let mut dock = DockState::new(vec!["main"]);
         let focused = dock.add_docked_surface(Tree::new(vec!["focused"]));

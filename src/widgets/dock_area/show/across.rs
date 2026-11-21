@@ -730,6 +730,48 @@ mod tests {
         assert!(!area.drag_source_valid(DragSource::Group(root), &mut viewer));
     }
 
+
+    #[test]
+    fn movement_rechecks_tab_identity_before_mutating_the_tree() {
+        let mut dock = DockState::new(vec!["first", "second"]);
+        dock.main_surface_mut()
+            .split_right(NodeIndex::root(), 0.5, vec!["target"]);
+        let left = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
+        let right = NodePath::new(SurfaceIndex::main(), NodeIndex(2));
+        let source = DragSource::Tab {
+            path: TabPath::new(SurfaceIndex::main(), NodeIndex(1), TabIndex(0)),
+            id: Id::unique("first"),
+        };
+        let destination = TabDestination::Node(right, TabInsert::Append);
+        let mut viewer = Viewer { allow_windows: true };
+        let mut area = DockArea::new(&mut dock);
+
+        // The original tab was replaced without changing the cached node or index.
+        area.dock_state.leaf_mut(left).unwrap().tabs[0] = "replacement";
+        assert!(!area.apply_move(source, destination, &mut viewer));
+        assert_eq!(area.dock_state.leaf(left).unwrap().tabs, ["replacement", "second"]);
+        assert_eq!(area.dock_state.leaf(right).unwrap().tabs, ["target"]);
+    }
+
+    #[test]
+    fn movement_rejects_an_invalid_destination_without_mutation() {
+        let mut dock = DockState::new(vec!["first"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let source = DragSource::Tab {
+            path: TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(0)),
+            id: Id::unique("first"),
+        };
+        let missing = NodePath::new(SurfaceIndex::main(), NodeIndex(100));
+        let mut viewer = Viewer { allow_windows: true };
+        let mut area = DockArea::new(&mut dock);
+        assert!(!area.apply_move(
+            source,
+            TabDestination::Node(missing, TabInsert::Append),
+            &mut viewer,
+        ));
+        assert_eq!(area.dock_state.leaf(root).unwrap().tabs, ["first"]);
+    }
+
     #[test]
     fn stale_drag_paths_are_rejected() {
         let mut dock = DockState::new(vec!["a"]);

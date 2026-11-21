@@ -388,14 +388,8 @@ impl<Tab> DockState<Tab> {
         if leaf.tabs.is_empty() {
             return false;
         }
-        // Destination validity is checked before consuming source tabs.
-        // This also protects against any future destination variants whose
-        // target cannot be resolved as a mutable leaf.
-        if let TabDestination::Node(path, TabInsert::Insert(_) | TabInsert::Append) = &dst {
-            if self.leaf(*path).is_err() {
-                return false;
-            }
-        }
+        // valid_move_destination already verifies the destination leaf.
+        // No tree mutation occurs between validation and the move.
         let leaf = self.leaf_mut(src).expect("validated source leaf");
         let active = leaf.active.0.min(leaf.tabs.len() - 1);
         let tabs = std::mem::take(&mut leaf.tabs);
@@ -450,8 +444,6 @@ impl<Tab> DockState<Tab> {
         true
     }
 
-    /// Moves a tab from a node to another node.
-    /// You need to specify with [`TabDestination`] how the tab should be moved.
     /// Whether a valid tab move would leave the source leaf unchanged.
     /// Insertion indices are measured before removing the source tab.
     pub(crate) fn tab_move_is_noop(&self, src: TabPath, destination: &TabDestination) -> bool {
@@ -477,7 +469,7 @@ impl<Tab> DockState<Tab> {
         }
     }
 
-    pub fn move_tab(&mut self, src: TabPath, dst_tab: impl Into<TabDestination>) -> bool {
+    /// Moves a tab to another leaf, a split, an empty surface, or a window.\n    /// Returns false without changing the tree when the move is invalid or a no-op.\n    pub fn move_tab(&mut self, src: TabPath, dst_tab: impl Into<TabDestination>) -> bool {
         let destination = dst_tab.into();
         if self.leaf(src.node_path()).is_err_or(|leaf| src.tab.0 >= leaf.tabs.len()) {
             return false;

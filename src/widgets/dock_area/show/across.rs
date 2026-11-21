@@ -714,6 +714,54 @@ mod tests {
     }
 
     #[test]
+    fn group_drag_moves_current_leaf_contents_after_membership_changes() {
+        let mut dock = DockState::new(vec!["original", "removed"]);
+        dock.main_surface_mut()
+            .split_right(NodeIndex::root(), 0.5, vec!["destination"]);
+        let source_path = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
+        let target_path = NodePath::new(SurfaceIndex::main(), NodeIndex(2));
+        let mut viewer = Viewer { allow_windows: true };
+        let mut area = DockArea::new(&mut dock);
+        let source = area.group_drag_source(source_path).unwrap();
+
+        // Group identity belongs to the leaf, not a snapshot of its tabs.
+        let leaf = area.dock_state.leaf_mut(source_path).unwrap();
+        leaf.tabs.remove(1);
+        leaf.tabs.push("added");
+        assert!(area.drag_source_valid(source, &mut viewer));
+        assert!(area.apply_move(
+            source,
+            TabDestination::Node(target_path, TabInsert::Append),
+            &mut viewer,
+        ));
+        assert_eq!(
+            area.dock_state.leaf(target_path).unwrap().tabs,
+            ["destination", "original", "added"],
+        );
+    }
+
+    #[test]
+    fn empty_group_cannot_be_moved_after_its_tabs_are_removed() {
+        let mut dock = DockState::new(vec!["original"]);
+        dock.main_surface_mut()
+            .split_right(NodeIndex::root(), 0.5, vec!["destination"]);
+        let source_path = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
+        let target_path = NodePath::new(SurfaceIndex::main(), NodeIndex(2));
+        let mut viewer = Viewer { allow_windows: true };
+        let mut area = DockArea::new(&mut dock);
+        let source = area.group_drag_source(source_path).unwrap();
+        area.dock_state.leaf_mut(source_path).unwrap().tabs.clear();
+
+        assert!(!area.drag_source_valid(source, &mut viewer));
+        assert!(!area.apply_move(
+            source,
+            TabDestination::Node(target_path, TabInsert::Append),
+            &mut viewer,
+        ));
+        assert_eq!(area.dock_state.leaf(target_path).unwrap().tabs, ["destination"]);
+    }
+
+    #[test]
     fn remote_release_cannot_move_a_replacement_group() {
         let mut dock = DockState::new(vec!["original", "other"]);
         dock.main_surface_mut()

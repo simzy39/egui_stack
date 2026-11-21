@@ -1489,6 +1489,63 @@ mod test {
     }
 
     #[test]
+    fn invalid_group_move_does_not_detach_source_or_invalidate_identities() {
+        let mut dock = DockState::new(vec!["a", "b"]);
+        let other = dock.add_window(vec!["c"]);
+        let main = SurfaceIndex::main();
+        let main_id = dock.capture_surface_identity(main).unwrap();
+        let other_id = dock.capture_surface_identity(other).unwrap();
+
+        assert!(!dock.move_node(
+            NodePath::new(main, NodeIndex::root()),
+            TabDestination::Node(
+                NodePath::new(other, NodeIndex::root()),
+                TabInsert::Insert(TabIndex(99)),
+            ),
+        ));
+        assert_eq!(dock.leaf(NodePath::MAIN_ROOT).unwrap().tabs, ["a", "b"]);
+        assert_eq!(dock.current_surface_identity(main), Some(main_id));
+        assert_eq!(dock.current_surface_identity(other), Some(other_id));
+    }
+
+    #[test]
+    fn group_move_into_window_preserves_active_tab_and_tab_count() {
+        let mut dock = DockState::new(vec!["a", "b", "c"]);
+        let root = NodePath::MAIN_ROOT;
+        dock.leaf_mut(root).unwrap().active = TabIndex(1);
+        assert!(dock.move_node(
+            root,
+            TabDestination::Window(Rect::from_min_size(
+                Pos2::new(40.0, 60.0),
+                Vec2::new(300.0, 200.0),
+            )),
+        ));
+        assert_eq!(dock.iter_all_tabs().count(), 3);
+        let moved = dock.find_tab(&"b").unwrap().node_path();
+        assert_ne!(moved.surface, SurfaceIndex::main());
+        let leaf = dock.leaf(moved).unwrap();
+        assert_eq!(leaf.tabs, ["a", "b", "c"]);
+        assert_eq!(leaf.active, TabIndex(1));
+    }
+
+    #[test]
+    fn rejected_invalid_window_move_preserves_source_identity() {
+        let mut dock = DockState::new(vec!["a", "b"]);
+        let main = SurfaceIndex::main();
+        let id = dock.capture_surface_identity(main).unwrap();
+        let invalid = Rect::from_min_size(
+            Pos2::new(f32::NAN, 0.0),
+            Vec2::new(200.0, 100.0),
+        );
+        assert!(!dock.move_tab(
+            TabPath::new(main, NodeIndex::root(), TabIndex(0)),
+            TabDestination::Window(invalid),
+        ));
+        assert_eq!(dock.leaf(NodePath::MAIN_ROOT).unwrap().tabs, ["a", "b"]);
+        assert_eq!(dock.current_surface_identity(main), Some(id));
+    }
+
+    #[test]
     fn same_leaf_append_moves_first_tab_to_end_without_loss() {
         let mut dock = DockState::new(vec!["a", "b", "c"]);
         let root = NodePath::MAIN_ROOT;

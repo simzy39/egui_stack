@@ -437,13 +437,21 @@ impl<Tab> DockState<Tab> {
                 self[surface] = tree;
             }
         }
-        if self[src].is_leaf() && self[src].tabs_count() == 0 {
-            self[src.surface].remove_leaf(src.node);
-        }
-        if self[src.surface].is_empty() && self.is_window(src.surface) {
-            self.remove_surface(src.surface);
-        }
+        self.cleanup_moved_source(src);
         true
+    }
+
+    /// Remove a source leaf emptied by a completed move, then close its empty
+    /// floating surface. Called only after the destination has received the tabs.
+    fn cleanup_moved_source(&mut self, source: NodePath) {
+        if self.leaf(source).is_ok_and(|leaf| leaf.tabs.is_empty()) {
+            self[source.surface].remove_leaf(source.node);
+        }
+        if self.is_window(source.surface)
+            && self.get_surface(source.surface).is_some_and(Surface::is_empty)
+        {
+            self.remove_surface(source.surface);
+        }
     }
 
     /// Whether a valid tab move would leave the source leaf unchanged.
@@ -512,12 +520,7 @@ impl<Tab> DockState<Tab> {
                 self[dst_surface] = Tree::new(vec![tab])
             }
         }
-        if self[src.node_path()].is_leaf() && self[src.node_path()].tabs_count() == 0 {
-            self[src.surface].remove_leaf(src.node);
-        }
-        if self[src.surface].is_empty() && self.is_window(src.surface) {
-            self.remove_surface(src.surface);
-        }
+        self.cleanup_moved_source(src.node_path());
         true
     }
 
@@ -633,12 +636,7 @@ impl<Tab> DockState<Tab> {
         }
 
         // Clean up any empty leaves and surfaces which may be left behind from the detachment.
-        if self[src.node_path()].is_leaf() && self[src.node_path()].tabs_count() == 0 {
-            self[src.surface].remove_leaf(src.node);
-        }
-        if self[src.surface].is_empty() && self.is_window(src.surface) {
-            self.remove_surface(src.surface);
-        }
+        self.cleanup_moved_source(src.node_path());
         surface_index
     }
 

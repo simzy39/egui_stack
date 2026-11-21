@@ -865,9 +865,18 @@ impl<Tab> DockArea<'_, Tab> {
                 (response, title_id)
             };
 
-            if self.draggable_tabs && response.is_pointer_button_down_on() {
-                let carries_group = *state.drag_carries_group
-                    .get_or_insert_with(|| self.modifiers_carry_group(tabs_ui));
+            if self.draggable_tabs
+                && response.is_pointer_button_down_on()
+                && tabs_ui.input(|i| i.pointer.primary_pressed())
+                && state.tab_press.is_none()
+                && state.group_press.is_none()
+                && !state.tab_drag_cancelled
+                && state.drag_lost.is_none()
+            {
+                // The initiating widget owns both the source and modifier mode.
+                // A competing widget must not latch the drag mode.
+                let carries_group = self.modifiers_carry_group(tabs_ui);
+                state.drag_carries_group = Some(carries_group);
                 if carries_group {
                     self.remember_group_press(tabs_ui, state, id, path);
                 } else {

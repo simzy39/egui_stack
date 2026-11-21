@@ -469,7 +469,9 @@ impl<Tab> DockState<Tab> {
         }
     }
 
-    /// Moves a tab to another leaf, a split, an empty surface, or a window.\n    /// Returns false without changing the tree when the move is invalid or a no-op.\n    pub fn move_tab(&mut self, src: TabPath, dst_tab: impl Into<TabDestination>) -> bool {
+    /// Moves a tab to another leaf, a split, an empty surface, or a window.
+    /// Returns false without changing the tree when the move is invalid or a no-op.
+    pub fn move_tab(&mut self, src: TabPath, dst_tab: impl Into<TabDestination>) -> bool {
         let destination = dst_tab.into();
         if self.leaf(src.node_path()).is_err_or(|leaf| src.tab.0 >= leaf.tabs.len()) {
             return false;

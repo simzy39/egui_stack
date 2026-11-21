@@ -1924,7 +1924,9 @@ impl<Tab> DockArea<'_, Tab> {
             && state.tab_press.is_none()
             && !state.tab_drag_cancelled
             && state.drag_lost.is_none()
-            && ui.input(|i| i.pointer.primary_down())
+            // Only the press frame may establish ownership. A handle which
+            // appears under an already-held pointer must not adopt that gesture.
+            && ui.input(|i| i.pointer.primary_pressed())
         {
             state.group_press = self
                 .group_drag_source(path)
@@ -1954,7 +1956,7 @@ impl<Tab> DockArea<'_, Tab> {
             || state.group_press.is_some()
             || state.tab_drag_cancelled
             || state.drag_lost.is_some()
-            || !ui.input(|i| i.pointer.primary_down())
+            || !ui.input(|i| i.pointer.primary_pressed())
         {
             return;
         }

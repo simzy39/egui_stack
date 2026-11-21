@@ -814,6 +814,34 @@ mod tests {
     }
 
     #[test]
+    fn retained_drop_rejects_a_recycled_destination_surface() {
+        let mut dock = DockState::new(vec!["source"]);
+        let old = dock.add_window(vec!["old target"]);
+        let mut area = DockArea::new(&mut dock);
+        let original = area.dock_state.capture_surface_identity(old).unwrap();
+        assert!(area.reported_surface_identity_valid(
+            &TabDestination::Node(
+                NodePath::new(old, NodeIndex::root()),
+                TabInsert::Append,
+            ),
+            Some(original),
+        ));
+
+        assert!(area.dock_state.remove_surface(old).is_some());
+        let replacement = area.dock_state.add_window(vec!["replacement"]);
+        assert_eq!(old, replacement);
+        let new_identity = area.dock_state.capture_surface_identity(replacement).unwrap();
+        assert_ne!(original, new_identity);
+        assert!(!area.reported_surface_identity_valid(
+            &TabDestination::Node(
+                NodePath::new(replacement, NodeIndex::root()),
+                TabInsert::Append,
+            ),
+            Some(original),
+        ));
+    }
+
+    #[test]
     fn remote_release_rechecks_float_permission() {
         for group in [false, true] {
             for allow_windows in [false, true] {

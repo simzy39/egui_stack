@@ -254,20 +254,26 @@ impl<Tab> DockState<Tab> {
     ///
     /// Returns the removed surface or `None` if it didn't exist.
     ///
-    /// Panics if you try to remove the main surface: `SurfaceIndex::main()`.
+    /// Returns `None` for the main surface, a vacant slot, or an invalid index.
+    /// Repeated removals are idempotent and cannot remove a later surface that
+    /// happens to reuse the same slot.
     pub fn remove_surface(&mut self, surface_index: SurfaceIndex) -> Option<Surface<Tab>> {
-        assert!(!surface_index.is_main());
-        (surface_index.0 < self.surfaces.len()).then(|| {
-            if self.focused_surface == Some(surface_index) {
-                self.focused_surface = Some(SurfaceIndex::main());
-            }
-            if surface_index.0 == self.surfaces.len() - 1 {
-                self.surfaces.pop().unwrap()
-            } else {
-                let dest = &mut self.surfaces[surface_index.0];
-                std::mem::replace(dest, Surface::Empty)
-            }
-        })
+        if surface_index.is_main()
+            || !self.is_surface_valid(surface_index)
+        {
+            return None;
+        }
+        if self.focused_surface == Some(surface_index) {
+            self.focused_surface = Some(SurfaceIndex::main());
+        }
+        if surface_index.0 == self.surfaces.len() - 1 {
+            self.surfaces.pop()
+        } else {
+            Some(std::mem::replace(
+                &mut self.surfaces[surface_index.0],
+                Surface::Empty,
+            ))
+        }
     }
 
     /// Sets which is the active tab at a specific `path`.
@@ -1189,6 +1195,21 @@ mod test {
         ));
         assert_eq!(dock.leaf(root).unwrap().tabs, ["first", "second"]);
         assert!(dock.get_surface(empty_surface).unwrap().is_empty());
+    }
+
+    #[test]
+    fn removing_surface_rejects_main_vacant_and_out_of_range_slots() {
+        let mut dock = DockState::new(vec!["main"]);
+        let first = dock.add_window(vec!["first"]);
+        let second = dock.add_window(vec!["second"]);
+        assert_eq!(dock.remove_surface(SurfaceIndex::main()).is_none(), true);
+        assert!(dock.remove_surface(first).is_some());
+        assert!(dock.remove_surface(first).is_none());
+        assert_eq!(dock[second].num_tabs(), 1);
+        assert!(dock.remove_surface(SurfaceIndex(usize::MAX)).is_none());
+        assert!(dock.remove_surface(second).is_some());
+        assert!(dock.remove_surface(second).is_none());
+        assert_eq!(dock[SurfaceIndex::main()].num_tabs(), 1);
     }
 
     #[test]

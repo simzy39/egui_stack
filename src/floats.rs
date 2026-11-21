@@ -1705,3 +1705,62 @@ fn put_back<Tab>(
     }
     (moved, keys)
 }
+
+#[cfg(test)]
+mod viewport_lifecycle_tests {
+    use super::*;
+    use crate::widgets::dock_area::drag_and_drop::DragSource;
+    use crate::widgets::dock_area::session::{DragSession, Outcome, Report};
+    use crate::{NodeIndex, SurfaceIndex, TabIndex, TabPath};
+
+    fn session(source: ViewportId) -> DragSession {
+        let path = TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(0));
+        DragSession::new(
+            DragSource::Tab { path, id: egui::Id::new("tab") },
+            Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(100.0, 100.0)),
+            source,
+            egui::Pos2::ZERO,
+        )
+    }
+
+    #[test]
+    fn closing_source_viewport_ends_drag_session() {
+        let source = ViewportId::from_hash_of("source");
+        let mut floating = Floating::default();
+        floating.session = Some(session(source));
+        floating.viewport_closed(source);
+        assert!(floating.session.is_none());
+    }
+
+    #[test]
+    fn closing_report_viewport_cancels_current_drag() {
+        let source = ViewportId::from_hash_of("source");
+        let target = ViewportId::from_hash_of("target");
+        let mut floating = Floating::default();
+        let mut active = session(source);
+        active.pass = 4;
+        active.reports.insert(target, Report {
+            stamp: 4,
+            rank: 1,
+            outcome: Outcome::Refused,
+            unfold: None,
+        });
+        floating.session = Some(active);
+        floating.viewport_closed(target);
+        let active = floating.session.as_ref().unwrap();
+        assert!(active.cancelled);
+        assert!(active.reports.is_empty());
+    }
+
+    #[test]
+    fn closing_unrelated_viewport_preserves_drag() {
+        let source = ViewportId::from_hash_of("source");
+        let unrelated = ViewportId::from_hash_of("unrelated");
+        let mut floating = Floating::default();
+        floating.session = Some(session(source));
+        floating.viewport_closed(unrelated);
+        let active = floating.session.as_ref().unwrap();
+        assert!(!active.cancelled);
+        assert_eq!(active.source, source);
+    }
+}

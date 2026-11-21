@@ -24,16 +24,16 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Formatting
-        continue-on-error: true
         run: cargo fmt --all -- --check
 
       - name: Clippy
-        continue-on-error: true
+        if: always()
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
       - name: Tests
-        continue-on-error: true
+        if: always()
         run: cargo test --workspace --all-features
 
       - name: Documentation
+        if: always()
         run: cargo doc --lib --no-deps --all-features

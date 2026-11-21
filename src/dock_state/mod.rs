@@ -489,12 +489,14 @@ impl<Tab> DockState<Tab> {
                 }
             },
             TabDestination::EmptySurface(surface) => {
-                assert!(self[surface].is_empty());
                 let mut tree = Tree::new(tabs);
                 if let Some(leaf) = tree.root_node_mut().and_then(Node::get_leaf_mut) {
                     leaf.active = TabIndex(active);
                 }
-                self[surface] = tree;
+                // An empty slot has no tree and cannot be accessed through IndexMut.
+                // Destination validity was checked before the source was detached.
+                self.invalidate_surface_identity(surface);
+                self.surfaces[surface.0] = Surface::Main(tree);
             }
         }
         self.cleanup_moved_source(src);
@@ -578,9 +580,9 @@ impl<Tab> DockState<Tab> {
                 }
             }
             TabDestination::EmptySurface(dst_surface) => {
-                assert!(self[dst_surface].is_empty());
                 let tab = self[src.node_path()].remove_tab(src.tab).unwrap();
-                self[dst_surface] = Tree::new(vec![tab])
+                self.invalidate_surface_identity(dst_surface);
+                self.surfaces[dst_surface.0] = Surface::Main(Tree::new(vec![tab]));
             }
         }
         self.cleanup_moved_source(cleanup_source);

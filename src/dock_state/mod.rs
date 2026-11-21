@@ -1087,7 +1087,11 @@ mod test {
         ));
         assert!(dock.find_tab(&"source").is_some());
         assert!(dock.find_tab(&"destination").is_some());
-        assert_eq!(dock.leaf(destination).unwrap().tabs, ["destination"]);
+        let destination_after_move = dock.find_tab(&"destination").unwrap().node_path();
+        assert_eq!(
+            dock.leaf(destination_after_move).unwrap().tabs,
+            ["destination"]
+        );
     }
 
     #[test]

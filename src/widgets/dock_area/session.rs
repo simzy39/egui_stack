@@ -66,11 +66,20 @@ pub(crate) struct Report {
     pub(crate) rank: u32,
     /// What a release does.
     pub(crate) outcome: Outcome,
-    /// Runtime identity of a leaf destination, captured when this report was made.
-    /// None for container splits, empty surfaces, windows and non-drop outcomes.
-    pub(crate) destination_identity: Option<u64>,
+    /// Structural identity of the destination node, captured when this report was made.
+    /// None for empty surfaces, windows and non-drop outcomes.
+    pub(crate) destination_identity: Option<DestinationIdentity>,
     /// The zone to unfold once the tab lands (a strip or a restore band of the main window).
     pub(crate) unfold: Option<ZoneName>,
+}
+
+/// Runtime identity of a reported destination node.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum DestinationIdentity {
+    Leaf(u64),
+    Horizontal(Vec<DestinationIdentity>),
+    Vertical(Vec<DestinationIdentity>),
+    Grid(Vec<DestinationIdentity>),
 }
 
 /// What a release over a viewport does.

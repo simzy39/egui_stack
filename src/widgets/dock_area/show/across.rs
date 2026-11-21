@@ -5,7 +5,7 @@ use egui::{Id, Key, Pos2, Rect, Ui};
 
 use super::super::{
     drag_and_drop::{DragData, DragSource, TreeComponent, make_overlay_painter},
-    session::{DragSession, Outcome, RELEASED_PASSES, Report},
+    session::{DestinationIdentity, DragSession, Outcome, RELEASED_PASSES, Report},
     state::State,
     PendingFloat,
 };
@@ -266,11 +266,9 @@ impl<Tab> DockArea<'_, Tab> {
     ) {
         let viewport = ui.ctx().viewport_id();
         let destination_identity = match &outcome {
-            Outcome::Drop(TabDestination::Node(path, _)) => self
-                .dock_state
-                .leaf_mut(*path)
-                .ok()
-                .map(|leaf| leaf.ensure_drag_identity()),
+            Outcome::Drop(TabDestination::Node(path, _)) => {
+                self.capture_destination_identity(*path)
+            }
             _ => None,
         };
         let Some(space) = self.space.as_mut() else {
@@ -331,7 +329,7 @@ impl<Tab> DockArea<'_, Tab> {
             Outcome::Drop(destination) => {
                 if !self.reported_destination_identity_valid(
                     &destination,
-                    report.destination_identity,
+                    report.destination_identity.as_ref(),
                 ) || !self.destination_valid(&destination)
                 {
                     return;
@@ -461,25 +459,83 @@ impl<Tab> DockArea<'_, Tab> {
         }
     }
 
-    /// Whether a reported leaf destination is still the exact leaf that was hovered.
+    /// Capture the identity of a destination node and its complete descendant structure.
+    ///
+    /// Leaf identities survive ordinary tab edits and node relocation, but are reset
+    /// when a leaf is replaced or a tree is cloned. Container identities are represented
+    /// by their kind and ordered descendant identities, so structural replacement is
+    /// rejected even when the container's positional node index is reused.
+    fn capture_destination_identity(&mut self, path: crate::NodePath) -> Option<DestinationIdentity> {
+        let (kind, children) = {
+            let node = self.dock_state.node_mut(path).ok()?;
+            if let Some(leaf) = node.get_leaf_mut() {
+                return Some(DestinationIdentity::Leaf(leaf.ensure_drag_identity()));
+            }
+            let kind = if node.is_grid() {
+                2
+            } else if node.is_horizontal() {
+                0
+            } else if node.is_vertical() {
+                1
+            } else {
+                return None;
+            };
+            (kind, node.children().to_vec())
+        };
+        let children = children
+            .into_iter()
+            .map(|child| self.capture_destination_identity(crate::NodePath::new(path.surface, child)))
+            .collect::<Option<Vec<_>>>()?;
+        Some(match kind {
+            0 => DestinationIdentity::Horizontal(children),
+            1 => DestinationIdentity::Vertical(children),
+            _ => DestinationIdentity::Grid(children),
+        })
+    }
+
+    /// Rebuild the current destination identity without assigning identities to new leaves.
+    fn current_destination_identity(&self, path: crate::NodePath) -> Option<DestinationIdentity> {
+        let node = self.dock_state.node(path).ok()?;
+        if let Some(leaf) = node.get_leaf() {
+            return (leaf.drag_identity != 0)
+                .then_some(DestinationIdentity::Leaf(leaf.drag_identity));
+        }
+        let kind = if node.is_grid() {
+            2
+        } else if node.is_horizontal() {
+            0
+        } else if node.is_vertical() {
+            1
+        } else {
+            return None;
+        };
+        let children = node.children().to_vec();
+        let children = children
+            .into_iter()
+            .map(|child| self.current_destination_identity(crate::NodePath::new(path.surface, child)))
+            .collect::<Option<Vec<_>>>()?;
+        Some(match kind {
+            0 => DestinationIdentity::Horizontal(children),
+            1 => DestinationIdentity::Vertical(children),
+            _ => DestinationIdentity::Grid(children),
+        })
+    }
+
+    /// Whether a reported destination still identifies the exact node that was hovered.
     ///
     /// A valid path is not sufficient: tree slots can be reused between the remote
     /// viewport's report and the source viewport's release.
     fn reported_destination_identity_valid(
         &self,
         destination: &TabDestination,
-        identity: Option<u64>,
+        identity: Option<&DestinationIdentity>,
     ) -> bool {
         let Some(identity) = identity else {
             return true;
         };
         match destination {
             TabDestination::Node(path, _) => {
-                identity != 0
-                    && self
-                        .dock_state
-                        .leaf(*path)
-                        .is_ok_and(|leaf| leaf.drag_identity == identity)
+                self.current_destination_identity(*path).as_ref() == Some(identity)
             }
             _ => false,
         }
@@ -1727,11 +1783,7 @@ mod tests {
         let mut dock = DockState::new(vec!["source", "original target"]);
         let destination_path = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
         let mut area = DockArea::new(&mut dock);
-        let destination_identity = area
-            .dock_state
-            .leaf_mut(destination_path)
-            .unwrap()
-            .ensure_drag_identity();
+        let destination_identity = area.capture_destination_identity(destination_path).unwrap();
 
         for insert in [
             TabInsert::Append,
@@ -1740,7 +1792,7 @@ mod tests {
         ] {
             assert!(area.reported_destination_identity_valid(
                 &TabDestination::Node(destination_path, insert),
-                Some(destination_identity),
+                Some(&destination_identity),
             ));
         }
 
@@ -1753,12 +1805,36 @@ mod tests {
         ] {
             assert!(!area.reported_destination_identity_valid(
                 &TabDestination::Node(destination_path, insert),
-                Some(destination_identity),
+                Some(&destination_identity),
             ));
         }
         assert!(area.reported_destination_identity_valid(
             &TabDestination::Node(destination_path, TabInsert::Append),
             None,
+        ));
+    }
+
+    #[test]
+    fn reported_container_destination_rejects_changed_descendant_structure() {
+        let mut dock = DockState::new(vec!["first"]);
+        dock.main_surface_mut()
+            .split_right(NodeIndex::root(), 0.5, vec!["second"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let mut area = DockArea::new(&mut dock);
+        let identity = area.capture_destination_identity(root).unwrap();
+
+        assert!(area.reported_destination_identity_valid(
+            &TabDestination::Node(root, TabInsert::Split(crate::Split::Below)),
+            Some(&identity),
+        ));
+
+        area.dock_state
+            .main_surface_mut()
+            .split_right(NodeIndex::root(), 0.5, vec!["third"]);
+
+        assert!(!area.reported_destination_identity_valid(
+            &TabDestination::Node(root, TabInsert::Split(crate::Split::Below)),
+            Some(&identity),
         ));
     }
 

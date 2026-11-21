@@ -863,7 +863,7 @@ impl<Tab> DockArea<'_, Tab> {
     fn hover_valid(&self, hover: &HoverData) -> bool {
         hover.outside
             || match hover.dst {
-                TreeComponent::Tab(_) => self.source_valid(&hover.dst),
+                TreeComponent::Tab(_) => self.component_exists(&hover.dst),
                 _ => self.destination_valid(&hover.dst.as_tab_destination()),
             }
     }
@@ -890,7 +890,7 @@ impl<Tab> DockArea<'_, Tab> {
         destination: &TabDestination,
         fresh: bool,
     ) -> Option<Option<egui::WidgetText>> {
-        if !self.source_valid(src) || !self.destination_valid(destination) {
+        if !self.component_exists(src) || !self.destination_valid(destination) {
             return Some(None);
         }
         let (src, tabs, group) = match *src {

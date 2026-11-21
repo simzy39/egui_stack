@@ -425,8 +425,7 @@ impl<Tab> DockArea<'_, Tab> {
         }
     }
 
-    /// Whether `src` is still a tab or a leaf of the state.
-    pub(super) fn source_valid(&self, src: &TreeComponent) -> bool {
+    /// Positional existence only, for hover targets and preflight veto checks.\n    /// Never use this to authorize a retained drag: use `drag_source_valid` instead.\n    pub(super) fn component_exists(&self, src: &TreeComponent) -> bool {
         match *src {
             TreeComponent::Tab(path) => self
                 .dock_state

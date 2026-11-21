@@ -372,8 +372,14 @@ impl<Tab> DockState<Tab> {
     /// or if the tab index at `path.tab` doesn't exist within the leaf node.
     #[inline]
     pub fn set_active_tab(&mut self, path: TabPath) -> Result {
-        let leaf = self.leaf_mut(path.node_path())?;
-        leaf.set_active_tab(path.tab)?;
+        // Check the tab before borrowing the leaf mutably. An invalid tab
+        // index must not invalidate an otherwise unchanged surface slot.
+        self.leaf(path.node_path())?
+            .tabs
+            .get(path.tab.0)
+            .ok_or(Error::InvalidTab)?;
+        self.leaf_mut(path.node_path())?
+            .set_active_tab(path.tab)?;
         Ok(())
     }
 
@@ -648,8 +654,13 @@ impl<Tab> DockState<Tab> {
         path: TabPath,
         tab_viewer: &mut impl TabViewer<Tab = Tab>,
     ) -> Result<OnCloseResponse> {
+        // Reject invalid paths before granting mutable access to the slot.
+        self.leaf(path.node_path())?
+            .tabs
+            .get(path.tab.0)
+            .ok_or(Error::InvalidTab)?;
         let leaf = self.leaf_mut(path.node_path())?;
-        let tab = leaf.tabs.get_mut(path.tab.0).ok_or(Error::InvalidTab)?;
+        let tab = &mut leaf.tabs[path.tab.0];
         if !tab_viewer.is_closeable(tab) {
             return Ok(OnCloseResponse::Ignore);
         }
@@ -1411,6 +1422,19 @@ mod test {
         assert_ne!(restored.capture_surface_identity(other), Some(original_other));
         assert!(restored.find_tab(&"main").is_some());
         assert!(restored.find_tab(&"other").is_some());
+    }
+
+    #[test]
+    fn invalid_active_tab_does_not_invalidate_surface_identity() {
+        let mut dock = DockState::new(vec!["a", "b"]);
+        let main = SurfaceIndex::main();
+        let identity = dock.capture_surface_identity(main).unwrap();
+        let invalid = TabPath::new(main, NodeIndex::root(), TabIndex(99));
+
+        assert!(dock.set_active_tab(invalid).is_err());
+        assert!(dock.focus_tab(invalid).is_err());
+        assert_eq!(dock.current_surface_identity(main), Some(identity));
+        assert_eq!(dock.find_tab(&"a").unwrap().surface, main);
     }
 
     #[test]

@@ -2,9 +2,9 @@
 
 use egui::{Id, Rect, ViewportId};
 
-use crate::floats::{FloatEvent, Floating, PendingFloat};
 #[cfg(test)]
 use crate::floats::WindowMove;
+use crate::floats::{FloatEvent, Floating, PendingFloat};
 use crate::layout::{
     Content, Drops, Fold, Laid, LaidZone, Layout, Restore, Shown, Zone, ZoneKind, ZoneName,
 };
@@ -1009,10 +1009,7 @@ impl<Tab> DockSpace<Tab> {
         };
         let target = if usable(&origin.dock) {
             Some((origin.dock.clone(), Some(near(&origin, Some(index)))))
-        } else if let Some(from) = float_origin
-            .as_ref()
-            .filter(|from| usable(&from.dock))
-        {
+        } else if let Some(from) = float_origin.as_ref().filter(|from| usable(&from.dock)) {
             Some((from.dock.clone(), Some(near(from, None))))
         } else {
             self.docks
@@ -1179,11 +1176,9 @@ impl<Tab> DockSpace<Tab> {
         // Floating metadata keyed by a dock name is only meaningful when the
         // replacement space still owns that floating dock.
         let live_float = |name: &str| {
-            self.docks.iter().any(|dock| {
-                dock.floating
-                    && dock.name == name
-                    && self.dock(&dock.name).is_some()
-            })
+            self.docks
+                .iter()
+                .any(|dock| dock.floating && dock.name == name && self.dock(&dock.name).is_some())
         };
         // Pending opens must not resurrect floats removed by the new layout.
         floating.pending.retain(|pending| live_float(&pending.dock));
@@ -1354,7 +1349,7 @@ pub(crate) fn detach<Tab>(
         Detach::Tab(path) => {
             let end = path.tab.0.checked_add(1)?;
             (path.node_path(), path.tab.0..end)
-        },
+        }
         Detach::Group(path) => (path, 0..state.leaf(path).ok()?.tabs.len()),
     };
     let from_float = state.is_window(node.surface)
@@ -1571,11 +1566,19 @@ mod detach_tests {
     #[test]
     fn carrying_origins_prefers_replacement_and_deduplicates_transferred_records() {
         let mut old = DockSpace::<&'static str>::new();
-        old.origins.push(TabOrigin::new(Id::unique("shared"), "old", None, None));
-        old.origins.push(TabOrigin::new(Id::unique("new"), "first", None, None));
-        old.origins.push(TabOrigin::new(Id::unique("new"), "duplicate", None, None));
+        old.origins
+            .push(TabOrigin::new(Id::unique("shared"), "old", None, None));
+        old.origins
+            .push(TabOrigin::new(Id::unique("new"), "first", None, None));
+        old.origins
+            .push(TabOrigin::new(Id::unique("new"), "duplicate", None, None));
         let mut replacement = DockSpace::<&'static str>::new();
-        replacement.origins.push(TabOrigin::new(Id::unique("shared"), "replacement", None, None));
+        replacement.origins.push(TabOrigin::new(
+            Id::unique("shared"),
+            "replacement",
+            None,
+            None,
+        ));
 
         replacement.carry_floats_from(&mut old);
 
@@ -1634,8 +1637,12 @@ mod detach_tests {
             old.docks[index].floating = true;
         }
         old.floating.window_move = Some(WindowMove::new("float-2"));
-        old.floating.grabs.insert("float-1".to_owned(), egui::Vec2::splat(4.0));
-        old.floating.grabs.insert("float-2".to_owned(), egui::Vec2::splat(8.0));
+        old.floating
+            .grabs
+            .insert("float-1".to_owned(), egui::Vec2::splat(4.0));
+        old.floating
+            .grabs
+            .insert("float-2".to_owned(), egui::Vec2::splat(8.0));
 
         let mut replacement = DockSpace::<&'static str>::new();
         replacement.add_dock("float-1", DockRules::default(), vec!["survives"]);
@@ -1657,7 +1664,9 @@ mod detach_tests {
     fn carried_float_metadata_is_pruned_when_its_dock_disappears() {
         let mut old = DockSpace::<&'static str>::new();
         old.add_dock("editor", DockRules::default(), vec!["one"]);
-        old.floating.placed.insert("float-1".to_owned(), egui::pos2(10.0, 20.0));
+        old.floating
+            .placed
+            .insert("float-1".to_owned(), egui::pos2(10.0, 20.0));
         old.floating.chrome.insert("float-1".to_owned(), 30.0);
         old.floating.moving.insert("float-1".to_owned());
         old.floating.close_asked.insert("float-1".to_owned());
@@ -1720,7 +1729,11 @@ mod detach_tests {
     #[test]
     fn restore_uses_surviving_neighbour_before_stale_index() {
         let mut space = DockSpace::new();
-        space.add_dock("editor", DockRules::default(), vec!["first", "middle", "last"]);
+        space.add_dock(
+            "editor",
+            DockRules::default(),
+            vec!["first", "middle", "last"],
+        );
         let (tab, place) = space.take_with_place(Id::unique("middle"), id).unwrap();
         assert_eq!(tab, "middle");
 
@@ -1728,7 +1741,10 @@ mod detach_tests {
         // neighbour disappears. The surviving neighbour remains authoritative.
         let first = space.dock("editor").unwrap().find_tab(&"first").unwrap();
         let surface = space.dock_surface("editor").unwrap();
-        space.state.remove_tab(TabPath::new(surface, first.0, first.1)).unwrap();
+        space
+            .state
+            .remove_tab(TabPath::new(surface, first.0, first.1))
+            .unwrap();
         assert_eq!(space.restore_at(tab, place, id).unwrap(), "editor");
         let tree = space.dock("editor").unwrap();
         let root = tree.leaf(NodeIndex::root()).unwrap();
@@ -1767,11 +1783,20 @@ mod detach_tests {
         let original_next = space.floating.next;
         let original_docks = space.docks.len();
         let bad = TabPath::new(surface, NodeIndex::root(), TabIndex(99));
-        assert!(detach(
-            &mut space.state, &mut space.docks, &mut space.origins,
-            &mut space.floating, Detach::Tab(bad), float_rect(), None,
-            FloatHost::InWindow, &mut id,
-        ).is_none());
+        assert!(
+            detach(
+                &mut space.state,
+                &mut space.docks,
+                &mut space.origins,
+                &mut space.floating,
+                Detach::Tab(bad),
+                float_rect(),
+                None,
+                FloatHost::InWindow,
+                &mut id,
+            )
+            .is_none()
+        );
         assert_eq!(space.docks.len(), original_docks);
         assert_eq!(space.floating.next, original_next);
         assert!(space.floating.pending.is_empty());
@@ -1784,11 +1809,20 @@ mod detach_tests {
         let mut space = DockSpace::new();
         let surface = space.add_dock("editor", DockRules::default(), vec!["one"]);
         let bad = TabPath::new(surface, NodeIndex::root(), TabIndex(usize::MAX));
-        assert!(detach(
-            &mut space.state, &mut space.docks, &mut space.origins,
-            &mut space.floating, Detach::Tab(bad), float_rect(), None,
-            FloatHost::Native, &mut id,
-        ).is_none());
+        assert!(
+            detach(
+                &mut space.state,
+                &mut space.docks,
+                &mut space.origins,
+                &mut space.floating,
+                Detach::Tab(bad),
+                float_rect(),
+                None,
+                FloatHost::Native,
+                &mut id,
+            )
+            .is_none()
+        );
         assert_eq!(space.docks.len(), 1);
         assert_eq!(space.floating.next, 0);
         assert!(space.floating.pending.is_empty());
@@ -1801,11 +1835,20 @@ mod detach_tests {
         let surface = space.add_dock("editor", DockRules::default(), vec!["one"]);
         space.floating.next = u32::MAX;
         let path = TabPath::new(surface, NodeIndex::root(), TabIndex(0));
-        assert!(detach(
-            &mut space.state, &mut space.docks, &mut space.origins,
-            &mut space.floating, Detach::Tab(path), float_rect(), None,
-            FloatHost::Native, &mut id,
-        ).is_none());
+        assert!(
+            detach(
+                &mut space.state,
+                &mut space.docks,
+                &mut space.origins,
+                &mut space.floating,
+                Detach::Tab(path),
+                float_rect(),
+                None,
+                FloatHost::Native,
+                &mut id,
+            )
+            .is_none()
+        );
         assert_eq!(space.floating.next, u32::MAX);
         assert_eq!(space.docks.len(), 1);
         assert!(space.origins.is_empty());
@@ -1819,10 +1862,17 @@ mod detach_tests {
         let surface = space.add_dock("editor", DockRules::default(), vec!["one", "two"]);
         let path = TabPath::new(surface, NodeIndex::root(), TabIndex(0));
         let name = detach(
-            &mut space.state, &mut space.docks, &mut space.origins,
-            &mut space.floating, Detach::Tab(path), float_rect(), None,
-            FloatHost::InWindow, &mut id,
-        ).expect("valid tab should detach");
+            &mut space.state,
+            &mut space.docks,
+            &mut space.origins,
+            &mut space.floating,
+            Detach::Tab(path),
+            float_rect(),
+            None,
+            FloatHost::InWindow,
+            &mut id,
+        )
+        .expect("valid tab should detach");
         let target = space.dock_surface(&name).expect("float dock registered");
         assert_eq!(space.state[target][NodeIndex::root()].tabs_count(), 1);
         assert_eq!(space.state[surface][NodeIndex::root()].tabs_count(), 1);
@@ -1838,10 +1888,17 @@ mod detach_tests {
         let surface = space.add_dock("editor", DockRules::default(), vec!["one", "two"]);
         let path = TabPath::new(surface, NodeIndex::root(), TabIndex(0));
         let name = detach(
-            &mut space.state, &mut space.docks, &mut space.origins,
-            &mut space.floating, Detach::Tab(path), float_rect(), None,
-            FloatHost::Native, &mut id,
-        ).expect("native float should be queued");
+            &mut space.state,
+            &mut space.docks,
+            &mut space.origins,
+            &mut space.floating,
+            Detach::Tab(path),
+            float_rect(),
+            None,
+            FloatHost::Native,
+            &mut id,
+        )
+        .expect("native float should be queued");
         assert_eq!(space.floating.next, 1);
         assert_eq!(space.floating.pending.len(), 1);
         assert_eq!(space.floating.pending[0].host, FloatHost::Native);
@@ -1856,17 +1913,30 @@ mod detach_tests {
         let surface = space.add_dock("editor", DockRules::default(), vec!["one", "two"]);
         let source = TabPath::new(surface, NodeIndex::root(), TabIndex(0));
         let first = detach(
-            &mut space.state, &mut space.docks, &mut space.origins,
-            &mut space.floating, Detach::Tab(source), float_rect(), None,
-            FloatHost::InWindow, &mut id,
-        ).unwrap();
+            &mut space.state,
+            &mut space.docks,
+            &mut space.origins,
+            &mut space.floating,
+            Detach::Tab(source),
+            float_rect(),
+            None,
+            FloatHost::InWindow,
+            &mut id,
+        )
+        .unwrap();
         let first_surface = space.dock_surface(&first).unwrap();
         let second = detach(
-            &mut space.state, &mut space.docks, &mut space.origins,
+            &mut space.state,
+            &mut space.docks,
+            &mut space.origins,
             &mut space.floating,
             Detach::Tab(TabPath::new(first_surface, NodeIndex::root(), TabIndex(0))),
-            float_rect(), None, FloatHost::Native, &mut id,
-        ).unwrap();
+            float_rect(),
+            None,
+            FloatHost::Native,
+            &mut id,
+        )
+        .unwrap();
         assert_ne!(first, second);
         assert_eq!(space.floating.pending.len(), 2);
         assert_eq!(space.origins.len(), 1);
@@ -1882,10 +1952,17 @@ mod detach_tests {
         let surface = space.add_dock("editor", DockRules::default(), vec!["one", "two"]);
         let node = NodePath::new(surface, NodeIndex::root());
         let name = detach(
-            &mut space.state, &mut space.docks, &mut space.origins,
-            &mut space.floating, Detach::Group(node), float_rect(), None,
-            FloatHost::InWindow, &mut id,
-        ).expect("valid group should detach");
+            &mut space.state,
+            &mut space.docks,
+            &mut space.origins,
+            &mut space.floating,
+            Detach::Group(node),
+            float_rect(),
+            None,
+            FloatHost::InWindow,
+            &mut id,
+        )
+        .expect("valid group should detach");
         let target = space.dock_surface(&name).unwrap();
         assert_eq!(space.state[target][NodeIndex::root()].tabs_count(), 2);
         assert_eq!(space.origins.len(), 2);

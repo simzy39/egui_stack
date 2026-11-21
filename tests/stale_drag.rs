@@ -169,7 +169,11 @@ fn the_dragged_tab_replaced_mid_drag() {
             ["Replacement", "Second"]
         );
         assert_eq!(
-            harness.state().leaf(NodePath::new(SurfaceIndex::main(), NodeIndex(2))).unwrap().tabs(),
+            harness
+                .state()
+                .leaf(NodePath::new(SurfaceIndex::main(), NodeIndex(2)))
+                .unwrap()
+                .tabs(),
             ["Third", "Fourth"]
         );
     }
@@ -180,10 +184,19 @@ fn the_dragged_tab_replaced_mid_drag() {
 fn the_preceding_tab_removed_mid_drag() {
     let mut harness = harness();
     let left = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
-    harness.state_mut().leaf_mut(left).unwrap().append_tab("Fifth".to_owned());
+    harness
+        .state_mut()
+        .leaf_mut(left)
+        .unwrap()
+        .append_tab("Fifth".to_owned());
     let target = drag_tab_over_right_leaf(&mut harness, "Second");
     assert_eq!(
-        harness.state_mut().leaf_mut(left).unwrap().remove_tab(TabIndex(0)).as_deref(),
+        harness
+            .state_mut()
+            .leaf_mut(left)
+            .unwrap()
+            .remove_tab(TabIndex(0))
+            .as_deref(),
         Some("First")
     );
     for _ in 0..5 {
@@ -192,9 +205,16 @@ fn the_preceding_tab_removed_mid_drag() {
     }
     harness.drop_at(target);
     harness.run_steps(5);
-    assert_eq!(harness.state().leaf(left).unwrap().tabs(), ["Second", "Fifth"]);
     assert_eq!(
-        harness.state().leaf(NodePath::new(SurfaceIndex::main(), NodeIndex(2))).unwrap().tabs(),
+        harness.state().leaf(left).unwrap().tabs(),
+        ["Second", "Fifth"]
+    );
+    assert_eq!(
+        harness
+            .state()
+            .leaf(NodePath::new(SurfaceIndex::main(), NodeIndex(2)))
+            .unwrap()
+            .tabs(),
         ["Third", "Fourth"]
     );
 }
@@ -205,10 +225,17 @@ fn appending_an_unrelated_tab_does_not_cancel_a_drag() {
     let mut harness = harness();
     let target = drag_first_over_right_leaf(&mut harness);
     let left = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
-    harness.state_mut().leaf_mut(left).unwrap().append_tab("Fifth".to_owned());
+    harness
+        .state_mut()
+        .leaf_mut(left)
+        .unwrap()
+        .append_tab("Fifth".to_owned());
     harness.drop_at(target);
     harness.run_steps(5);
-    assert_eq!(harness.state().leaf(left).unwrap().tabs(), ["Second", "Fifth"]);
+    assert_eq!(
+        harness.state().leaf(left).unwrap().tabs(),
+        ["Second", "Fifth"]
+    );
     let mut all = tabs(harness.state());
     all.sort();
     assert_eq!(all, ["Fifth", "First", "Fourth", "Second", "Third"]);
@@ -220,10 +247,18 @@ fn reordering_tabs_cancels_drag_and_allows_a_new_drag() {
     let mut harness = harness();
     let target = drag_first_over_right_leaf(&mut harness);
     let left = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
-    harness.state_mut().leaf_mut(left).unwrap().tabs_mut().swap(0, 1);
+    harness
+        .state_mut()
+        .leaf_mut(left)
+        .unwrap()
+        .tabs_mut()
+        .swap(0, 1);
     harness.drop_at(target);
     harness.run_steps(5);
-    assert_eq!(harness.state().leaf(left).unwrap().tabs(), ["Second", "First"]);
+    assert_eq!(
+        harness.state().leaf(left).unwrap().tabs(),
+        ["Second", "First"]
+    );
     let target = drag_tab_over_right_leaf(&mut harness, "First");
     harness.drop_at(target);
     harness.run_steps(5);
@@ -235,8 +270,14 @@ fn reordering_tabs_cancels_drag_and_allows_a_new_drag() {
 fn replacement_before_drag_activation_does_not_inherit_the_press() {
     let mut harness = harness();
     harness.run();
-    let start = harness.get_by_role_and_label(Role::Tab, "First").rect().center();
-    let target = harness.state().main_surface()[NodeIndex(2)].rect().unwrap().center();
+    let start = harness
+        .get_by_role_and_label(Role::Tab, "First")
+        .rect()
+        .center();
+    let target = harness.state().main_surface()[NodeIndex(2)]
+        .rect()
+        .unwrap()
+        .center();
     harness.hover_at(start);
     harness.step();
     harness.drag_at(start);
@@ -251,5 +292,8 @@ fn replacement_before_drag_activation_does_not_inherit_the_press() {
     harness.step();
     harness.drop_at(target);
     harness.run_steps(5);
-    assert_eq!(harness.state().leaf(left).unwrap().tabs(), ["Replacement", "Second"]);
+    assert_eq!(
+        harness.state().leaf(left).unwrap().tabs(),
+        ["Replacement", "Second"]
+    );
 }

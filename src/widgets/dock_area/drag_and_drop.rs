@@ -655,7 +655,10 @@ mod tests {
                         outside: false,
                     },
                     drag: DragData {
-                        source: DragSource::Group { path: source, id: 1 },
+                        source: DragSource::Group {
+                            path: source,
+                            id: 1,
+                        },
                         rect,
                     },
                     pointer: center + offset,
@@ -713,7 +716,8 @@ mod tests {
                         },
                         drag: DragData {
                             source: DragSource::Group {
-                                path: NodePath::new(SurfaceIndex::main(), NodeIndex(2)), id: 1,
+                                path: NodePath::new(SurfaceIndex::main(), NodeIndex(2)),
+                                id: 1,
                             },
                             rect,
                         },

@@ -4,10 +4,10 @@
 use egui::{Id, Key, Pos2, Rect, Ui};
 
 use super::super::{
+    PendingFloat,
     drag_and_drop::{DragData, DragSource, TreeComponent, make_overlay_painter},
     session::{DestinationIdentity, DragSession, Outcome, RELEASED_PASSES, Report},
     state::State,
-    PendingFloat,
 };
 use crate::dock_space::{TabOrigin, dock_name};
 use crate::layout::ZoneName;
@@ -52,8 +52,8 @@ impl<Tab> DockArea<'_, Tab> {
             .as_ref()
             .and_then(|space| space.floating.session.as_ref())
             .map(|session| session.payload);
-        if let Some(invalid_source) = session_source
-            .filter(|source| !self.drag_source_valid(*source, tab_viewer))
+        if let Some(invalid_source) =
+            session_source.filter(|source| !self.drag_source_valid(*source, tab_viewer))
         {
             // The invalid session may already have populated this viewport's preview.
             // Do not let that stale preview recreate the cancelled session below.
@@ -114,12 +114,7 @@ impl<Tab> DockArea<'_, Tab> {
                 {
                     session
                 }
-                slot => slot.insert(DragSession::new(
-                    drag.source,
-                    drag.rect,
-                    viewport,
-                    local,
-                )),
+                slot => slot.insert(DragSession::new(drag.source, drag.rect, viewport, local)),
             };
             session.pass += 1;
             session.local = local;
@@ -380,12 +375,11 @@ impl<Tab> DockArea<'_, Tab> {
                     .refusal_of(&src, tab_viewer, &destination, true)
                     .is_none()
                     && self.apply_move(source, destination, tab_viewer)
+                    && let Some(space) = &mut self.space
                 {
-                    if let Some(space) = &mut self.space {
-                        space.drop_zone = dock.zip(report.unfold.clone());
-                        if let Some(zone) = report.unfold {
-                            space.no_drop.unfolds.push(zone);
-                        }
+                    space.drop_zone = dock.zip(report.unfold.clone());
+                    if let Some(zone) = report.unfold {
+                        space.no_drop.unfolds.push(zone);
                     }
                 }
             }
@@ -445,9 +439,11 @@ impl<Tab> DockArea<'_, Tab> {
 
     /// Check a group against the exact leaf retained when the gesture began.
     pub(super) fn group_source_valid(&self, path: NodePath, id: u64) -> bool {
-        id != 0 && self.dock_state.leaf(path).is_ok_and(|leaf| {
-            !leaf.tabs.is_empty() && leaf.drag_identity == id
-        })
+        id != 0
+            && self
+                .dock_state
+                .leaf(path)
+                .is_ok_and(|leaf| !leaf.tabs.is_empty() && leaf.drag_identity == id)
     }
 
     /// A retained drag must still refer to its original tab, not just a valid slot.
@@ -499,10 +495,7 @@ impl<Tab> DockArea<'_, Tab> {
     }
 
     /// Read a node's identity without assigning one to a replacement.
-    fn current_destination_identity(
-        &self,
-        path: crate::NodePath,
-    ) -> Option<DestinationIdentity> {
+    fn current_destination_identity(&self, path: crate::NodePath) -> Option<DestinationIdentity> {
         let node = self.dock_state.node(path).ok()?;
         if let Some(leaf) = node.get_leaf() {
             return (leaf.drag_identity != 0)
@@ -558,7 +551,10 @@ impl<Tab> DockArea<'_, Tab> {
             }),
             TabDestination::EmptySurface(surface) => reported.is_some_and(|identity| {
                 self.dock_state.current_surface_identity(*surface) == Some(identity)
-                    && self.dock_state.get_surface(*surface).is_some_and(crate::Surface::is_empty)
+                    && self
+                        .dock_state
+                        .get_surface(*surface)
+                        .is_some_and(crate::Surface::is_empty)
             }),
             TabDestination::Window(_) => reported.is_none(),
         }
@@ -649,15 +645,14 @@ impl<Tab> DockArea<'_, Tab> {
             TabDestination::EmptySurface(surface) => Some(surface),
             TabDestination::Window(_) => None,
         };
-        let origin_update = to.and_then(|surface| {
-            self.prepare_origin_update(&src, surface, tab_viewer)
-        });
+        let origin_update =
+            to.and_then(|surface| self.prepare_origin_update(&src, surface, tab_viewer));
         match src {
             TreeComponent::Node(path) => {
                 if !self.dock_state.move_node(path, destination.clone()) {
                     return false;
                 }
-            },
+            }
             TreeComponent::Tab(path) => {
                 let count = self.dock_state[path.node_path()].tabs_count();
                 if !self.dock_state.move_tab(path, destination.clone()) {
@@ -698,7 +693,10 @@ impl<Tab> DockArea<'_, Tab> {
         }
         let from = src.surface_address();
         let is_float = |surface| {
-            space.docks.iter().any(|dock| dock.surface == surface && dock.floating)
+            space
+                .docks
+                .iter()
+                .any(|dock| dock.surface == surface && dock.floating)
         };
         let from_float = is_float(from) || self.dock_state.is_window(from);
         let to_float = is_float(to);
@@ -743,7 +741,9 @@ impl<Tab> DockArea<'_, Tab> {
 
     fn commit_origin_update(&mut self, update: Option<PendingOriginUpdate>) {
         let Some(update) = update else { return };
-        let Some(space) = self.space.as_mut() else { return };
+        let Some(space) = self.space.as_mut() else {
+            return;
+        };
         for origin in update.tabs {
             space.origins.retain(|existing| existing.tab != origin.tab);
             if update.entering_float {
@@ -842,7 +842,7 @@ mod tests {
         let untouched = dock.add_window(vec!["other"]);
         dock.remove_surface(vacant).unwrap();
         assert!(dock.is_surface_valid(untouched));
-        let mut area = DockArea::new(&mut dock);
+        let area = DockArea::new(&mut dock);
         let original = area.dock_state.capture_surface_identity(vacant).unwrap();
         let destination = TabDestination::EmptySurface(vacant);
         assert!(area.reported_surface_identity_valid(&destination, Some(original)));
@@ -850,7 +850,11 @@ mod tests {
         let occupied = area.dock_state.add_window(vec!["replacement"]);
         assert_eq!(occupied, vacant);
         area.dock_state.remove_surface(occupied).unwrap();
-        assert!(area.dock_state.get_surface(vacant).is_none_or(crate::Surface::is_empty));
+        assert!(
+            area.dock_state
+                .get_surface(vacant)
+                .is_none_or(crate::Surface::is_empty)
+        );
         assert!(!area.reported_surface_identity_valid(&destination, Some(original)));
     }
 
@@ -858,20 +862,20 @@ mod tests {
     fn retained_drop_rejects_a_recycled_destination_surface() {
         let mut dock = DockState::new(vec!["source"]);
         let old = dock.add_window(vec!["old target"]);
-        let mut area = DockArea::new(&mut dock);
+        let area = DockArea::new(&mut dock);
         let original = area.dock_state.capture_surface_identity(old).unwrap();
         assert!(area.reported_surface_identity_valid(
-            &TabDestination::Node(
-                NodePath::new(old, NodeIndex::root()),
-                TabInsert::Append,
-            ),
+            &TabDestination::Node(NodePath::new(old, NodeIndex::root()), TabInsert::Append,),
             Some(original),
         ));
 
         assert!(area.dock_state.remove_surface(old).is_some());
         let replacement = area.dock_state.add_window(vec!["replacement"]);
         assert_eq!(old, replacement);
-        let new_identity = area.dock_state.capture_surface_identity(replacement).unwrap();
+        let new_identity = area
+            .dock_state
+            .capture_surface_identity(replacement)
+            .unwrap();
         assert_ne!(original, new_identity);
         assert!(!area.reported_surface_identity_valid(
             &TabDestination::Node(
@@ -912,11 +916,15 @@ mod tests {
                 };
                 let mut viewer = Viewer { allow_windows };
                 let mut area = DockArea::dock(&mut space, "main");
-                let src = if group { area.group_drag_source(path).unwrap() } else { src };
+                let src = if group {
+                    area.group_drag_source(path).unwrap()
+                } else {
+                    src
+                };
                 assert!(area.is_float_dock(target));
-                let destination_identity = area
-                    .capture_destination_identity(NodePath::new(target, NodeIndex::root()));
-        let surface_identity_0 = area.dock_state.capture_surface_identity(target);
+                let destination_identity =
+                    area.capture_destination_identity(NodePath::new(target, NodeIndex::root()));
+                let surface_identity_0 = area.dock_state.capture_surface_identity(target);
                 area.release_over(
                     Report {
                         stamp: 0,
@@ -951,14 +959,18 @@ mod tests {
         let main = space.dock_surface("main").unwrap();
         let other = space.dock_surface("other").unwrap();
         let rect = Rect::from_min_size(Pos2::ZERO, egui::vec2(300.0, 200.0));
-        let key = space.float_out(
-            TabPath::new(other, NodeIndex::root(), TabIndex(0)),
-            rect,
-            |tab| Id::unique(*tab),
-        ).unwrap();
+        let key = space
+            .float_out(
+                TabPath::new(other, NodeIndex::root(), TabIndex(0)),
+                rect,
+                |tab| Id::unique(*tab),
+            )
+            .unwrap();
         let float_surface = space.dock_surface(&key).unwrap();
         let path = TabPath::new(main, NodeIndex::root(), TabIndex(0));
-        let mut viewer = Viewer { allow_windows: true };
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
         {
             let mut area = DockArea::dock(&mut space, "main");
             let source = DragSource::Tab {
@@ -990,7 +1002,9 @@ mod tests {
                 &mut viewer,
             ));
         }
-        let origin = space.origin(Id::unique("first")).expect("successful move records origin");
+        let origin = space
+            .origin(Id::unique("first"))
+            .expect("successful move records origin");
         assert_eq!(origin.dock, "main");
         assert_eq!(origin.after, Some(Id::unique("second")));
 
@@ -1004,10 +1018,7 @@ mod tests {
             };
             assert!(!area.apply_move(
                 source,
-                TabDestination::Node(
-                    NodePath::new(main, NodeIndex(999)),
-                    TabInsert::Append,
-                ),
+                TabDestination::Node(NodePath::new(main, NodeIndex(999)), TabInsert::Append,),
                 &mut viewer,
             ));
         }
@@ -1022,10 +1033,7 @@ mod tests {
             };
             assert!(area.apply_move(
                 source,
-                TabDestination::Node(
-                    NodePath::new(main, NodeIndex::root()),
-                    TabInsert::Append,
-                ),
+                TabDestination::Node(NodePath::new(main, NodeIndex::root()), TabInsert::Append,),
                 &mut viewer,
             ));
         }
@@ -1040,14 +1048,18 @@ mod tests {
         let main = space.dock_surface("main").unwrap();
         let other = space.dock_surface("other").unwrap();
         let rect = Rect::from_min_size(Pos2::ZERO, egui::vec2(300.0, 200.0));
-        let key = space.float_out(
-            TabPath::new(other, NodeIndex::root(), TabIndex(0)),
-            rect,
-            |tab| Id::unique(*tab),
-        ).unwrap();
+        let key = space
+            .float_out(
+                TabPath::new(other, NodeIndex::root(), TabIndex(0)),
+                rect,
+                |tab| Id::unique(*tab),
+            )
+            .unwrap();
         let target = space.dock_surface(&key).unwrap();
         let source_path = NodePath::new(main, NodeIndex::root());
-        let mut viewer = Viewer { allow_windows: true };
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
         {
             let mut area = DockArea::dock(&mut space, "main");
             let source = area.group_drag_source(source_path).unwrap();
@@ -1076,7 +1088,7 @@ mod tests {
     #[test]
     fn destination_validation_accepts_vacant_surface_and_rejects_occupied_surface() {
         let mut dock = DockState::new(vec!["first"]);
-        let mut area = DockArea::new(&mut dock);
+        let area = DockArea::new(&mut dock);
         assert!(!area.destination_valid(&TabDestination::EmptySurface(SurfaceIndex::main())));
         assert!(!area.destination_valid(&TabDestination::EmptySurface(SurfaceIndex(999))));
     }
@@ -1085,7 +1097,9 @@ mod tests {
     fn positional_insert_report_rejects_reordered_destination_tabs() {
         let mut dock = DockState::new(vec!["first", "second", "third"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
-        let mut viewer = Viewer { allow_windows: true };
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
         let mut area = DockArea::new(&mut dock);
         let destination = TabDestination::Node(root, TabInsert::Insert(TabIndex(1)));
         let reported: Vec<_> = area
@@ -1097,29 +1111,19 @@ mod tests {
             .map(|tab| viewer.id(tab))
             .collect();
 
-        assert!(area.reported_insertion_order_valid(
-            &destination,
-            Some(&reported),
-            &mut viewer,
-        ));
+        assert!(area.reported_insertion_order_valid(&destination, Some(&reported), &mut viewer,));
         area.dock_state.leaf_mut(root).unwrap().tabs.swap(0, 2);
-        assert!(!area.reported_insertion_order_valid(
-            &destination,
-            Some(&reported),
-            &mut viewer,
-        ));
-        assert!(!area.reported_insertion_order_valid(
-            &destination,
-            None,
-            &mut viewer,
-        ));
+        assert!(!area.reported_insertion_order_valid(&destination, Some(&reported), &mut viewer,));
+        assert!(!area.reported_insertion_order_valid(&destination, None, &mut viewer,));
     }
 
     #[test]
     fn positional_insert_report_rejects_ambiguous_tab_identities() {
         let mut dock = DockState::new(vec!["duplicate", "duplicate"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
-        let mut viewer = Viewer { allow_windows: true };
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
         let mut area = DockArea::new(&mut dock);
         let destination = TabDestination::Node(root, TabInsert::Insert(TabIndex(1)));
         let reported: Vec<_> = area
@@ -1132,11 +1136,7 @@ mod tests {
             .collect();
 
         assert_eq!(reported[0], reported[1]);
-        assert!(!area.reported_insertion_order_valid(
-            &destination,
-            Some(&reported),
-            &mut viewer,
-        ));
+        assert!(!area.reported_insertion_order_valid(&destination, Some(&reported), &mut viewer,));
     }
 
     #[test]
@@ -1147,7 +1147,9 @@ mod tests {
         let source_path = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
         let target_path = NodePath::new(SurfaceIndex::main(), NodeIndex(2));
         let rect = Rect::from_min_size(Pos2::ZERO, egui::vec2(200.0, 100.0));
-        let mut viewer = Viewer { allow_windows: true };
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
         let mut area = DockArea::new(&mut dock);
         let source_path_tab = TabPath::new(SurfaceIndex::main(), NodeIndex(1), TabIndex(0));
         let source = DragSource::Tab {
@@ -1162,7 +1164,9 @@ mod tests {
         let destination = TabDestination::Node(target_path, TabInsert::Insert(TabIndex(2)));
         assert!(!area.destination_valid(&destination));
         let destination_identity = area.capture_destination_identity(target_path);
-        let surface_identity_1 = area.dock_state.capture_surface_identity(target_path.surface);
+        let surface_identity_1 = area
+            .dock_state
+            .capture_surface_identity(target_path.surface);
         area.release_over(
             Report {
                 stamp: 0,
@@ -1189,7 +1193,9 @@ mod tests {
         let source_path = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
         let target_path = NodePath::new(SurfaceIndex::main(), NodeIndex(2));
         let rect = Rect::from_min_size(Pos2::ZERO, egui::vec2(200.0, 100.0));
-        let mut viewer = Viewer { allow_windows: true };
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
         let mut area = DockArea::new(&mut dock);
         let source = area.group_drag_source(source_path).unwrap();
         let target_identity = area.capture_destination_identity(target_path).unwrap();
@@ -1199,15 +1205,14 @@ mod tests {
         let replacement = area.dock_state.leaf(target_path).unwrap().clone();
         *area.dock_state.leaf_mut(target_path).unwrap() = replacement;
 
-        let surface_identity_2 = area.dock_state.capture_surface_identity(target_path.surface);
+        let surface_identity_2 = area
+            .dock_state
+            .capture_surface_identity(target_path.surface);
         area.release_over(
             Report {
                 stamp: 0,
                 rank: 0,
-                outcome: Outcome::Drop(TabDestination::Node(
-                    target_path,
-                    TabInsert::Append,
-                )),
+                outcome: Outcome::Drop(TabDestination::Node(target_path, TabInsert::Append)),
                 destination_identity: Some(target_identity),
                 destination_surface_identity: surface_identity_2,
                 insertion_order: None,
@@ -1232,7 +1237,9 @@ mod tests {
             .split_right(NodeIndex::root(), 0.5, vec!["destination"]);
         let source_path = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
         let target_path = NodePath::new(SurfaceIndex::main(), NodeIndex(2));
-        let mut viewer = Viewer { allow_windows: true };
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
         let mut area = DockArea::new(&mut dock);
         let source = area.group_drag_source(source_path).unwrap();
 
@@ -1256,7 +1263,9 @@ mod tests {
     fn unchanged_tab_reorder_does_not_report_a_move() {
         let mut dock = DockState::new(vec!["first", "second", "third"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
-        let mut viewer = Viewer { allow_windows: true };
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
         let mut area = DockArea::new(&mut dock);
         let source = DragSource::Tab {
             path: TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(1)),
@@ -1266,11 +1275,7 @@ mod tests {
             TabInsert::Insert(TabIndex(1)),
             TabInsert::Insert(TabIndex(2)),
         ] {
-            assert!(!area.apply_move(
-                source,
-                TabDestination::Node(root, insert),
-                &mut viewer,
-            ));
+            assert!(!area.apply_move(source, TabDestination::Node(root, insert), &mut viewer,));
             assert_eq!(
                 area.dock_state.leaf(root).unwrap().tabs,
                 ["first", "second", "third"],
@@ -1294,7 +1299,9 @@ mod tests {
             .split_right(NodeIndex::root(), 0.5, vec!["destination"]);
         let source_path = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
         let target_path = NodePath::new(SurfaceIndex::main(), NodeIndex(2));
-        let mut viewer = Viewer { allow_windows: true };
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
         let mut area = DockArea::new(&mut dock);
         let source = area.group_drag_source(source_path).unwrap();
 
@@ -1322,7 +1329,9 @@ mod tests {
             .split_right(NodeIndex::root(), 0.5, vec!["destination"]);
         let source_path = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
         let target_path = NodePath::new(SurfaceIndex::main(), NodeIndex(2));
-        let mut viewer = Viewer { allow_windows: true };
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
         let mut area = DockArea::new(&mut dock);
         let source = area.group_drag_source(source_path).unwrap();
         area.dock_state.leaf_mut(source_path).unwrap().tabs.clear();
@@ -1333,7 +1342,10 @@ mod tests {
             TabDestination::Node(target_path, TabInsert::Append),
             &mut viewer,
         ));
-        assert_eq!(area.dock_state.leaf(target_path).unwrap().tabs, ["destination"]);
+        assert_eq!(
+            area.dock_state.leaf(target_path).unwrap().tabs,
+            ["destination"]
+        );
     }
 
     #[test]
@@ -1344,7 +1356,9 @@ mod tests {
         let source_path = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
         let target_path = NodePath::new(SurfaceIndex::main(), NodeIndex(2));
         let rect = Rect::from_min_size(Pos2::ZERO, egui::vec2(200.0, 100.0));
-        let mut viewer = Viewer { allow_windows: true };
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
         let mut area = DockArea::new(&mut dock);
         let source = area.group_drag_source(source_path).unwrap();
 
@@ -1353,12 +1367,11 @@ mod tests {
         let replacement = area.dock_state.leaf(source_path).unwrap().clone();
         *area.dock_state.leaf_mut(source_path).unwrap() = replacement;
         assert!(!area.drag_source_valid(source, &mut viewer));
-        assert_ne!(
-            area.group_drag_source(source_path),
-            Some(source),
-        );
+        assert_ne!(area.group_drag_source(source_path), Some(source),);
         let destination_identity = area.capture_destination_identity(target_path);
-        let surface_identity_3 = area.dock_state.capture_surface_identity(target_path.surface);
+        let surface_identity_3 = area
+            .dock_state
+            .capture_surface_identity(target_path.surface);
         area.release_over(
             Report {
                 stamp: 0,
@@ -1373,18 +1386,21 @@ mod tests {
             rect,
             &mut viewer,
         );
-        assert_eq!(area.dock_state.leaf(source_path).unwrap().tabs, ["original", "other"]);
-        assert_eq!(area.dock_state.leaf(target_path).unwrap().tabs, ["destination"]);
+        assert_eq!(
+            area.dock_state.leaf(source_path).unwrap().tabs,
+            ["original", "other"]
+        );
+        assert_eq!(
+            area.dock_state.leaf(target_path).unwrap().tabs,
+            ["destination"]
+        );
     }
 
     #[test]
     fn remote_release_cannot_move_a_replacement_tab() {
         let mut dock = DockState::new(vec!["original", "other"]);
-        dock.main_surface_mut().split_right(
-            NodeIndex::root(),
-            0.5,
-            vec!["destination"],
-        );
+        dock.main_surface_mut()
+            .split_right(NodeIndex::root(), 0.5, vec!["destination"]);
         let source_path = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
         let target_path = NodePath::new(SurfaceIndex::main(), NodeIndex(2));
         let source = DragSource::Tab {
@@ -1392,13 +1408,17 @@ mod tests {
             id: Id::unique("original"),
         };
         let rect = Rect::from_min_size(Pos2::ZERO, egui::vec2(200.0, 100.0));
-        let mut viewer = Viewer { allow_windows: true };
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
         let mut area = DockArea::new(&mut dock);
         area.dock_state.leaf_mut(source_path).unwrap().tabs[0] = "replacement";
 
         // Exercise the actual remote-release boundary, not only apply_move.
         let destination_identity = area.capture_destination_identity(target_path);
-        let surface_identity_4 = area.dock_state.capture_surface_identity(target_path.surface);
+        let surface_identity_4 = area
+            .dock_state
+            .capture_surface_identity(target_path.surface);
         area.release_over(
             Report {
                 stamp: 0,
@@ -1413,8 +1433,14 @@ mod tests {
             rect,
             &mut viewer,
         );
-        assert_eq!(area.dock_state.leaf(source_path).unwrap().tabs, ["replacement", "other"]);
-        assert_eq!(area.dock_state.leaf(target_path).unwrap().tabs, ["destination"]);
+        assert_eq!(
+            area.dock_state.leaf(source_path).unwrap().tabs,
+            ["replacement", "other"]
+        );
+        assert_eq!(
+            area.dock_state.leaf(target_path).unwrap().tabs,
+            ["destination"]
+        );
     }
 
     #[test]
@@ -1425,7 +1451,9 @@ mod tests {
             path: TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(0)),
             id: Id::unique("first"),
         };
-        let mut viewer = Viewer { allow_windows: true };
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
         let mut area = DockArea::new(&mut dock);
         assert!(area.drag_source_valid(source, &mut viewer));
         area.dock_state.leaf_mut(root).unwrap().tabs[0] = "replacement";
@@ -1435,13 +1463,15 @@ mod tests {
     #[test]
     fn remote_release_moves_retained_tab_to_another_leaf() {
         let mut dock = DockState::new(vec!["source", "remaining"]);
-        let [left, right] = dock.main_surface_mut().split_right(
-            NodeIndex::root(), 0.5, vec!["target"],
-        );
+        let [left, right] =
+            dock.main_surface_mut()
+                .split_right(NodeIndex::root(), 0.5, vec!["target"]);
         let source_path = TabPath::new(SurfaceIndex::main(), left, TabIndex(0));
         let destination_path = NodePath::new(SurfaceIndex::main(), right);
         let rect = Rect::from_min_size(Pos2::ZERO, egui::vec2(200.0, 100.0));
-        let mut viewer = Viewer { allow_windows: true };
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
         let mut area = DockArea::new(&mut dock);
         let source = DragSource::Tab {
             path: source_path,
@@ -1450,15 +1480,14 @@ mod tests {
         let session = DragSession::new(source, rect, egui::ViewportId::ROOT, Pos2::ZERO);
         assert!(area.drag_source_valid(session.payload, &mut viewer));
         let destination_identity = area.capture_destination_identity(destination_path);
-        let surface_identity_5 = area.dock_state.capture_surface_identity(destination_path.surface);
+        let surface_identity_5 = area
+            .dock_state
+            .capture_surface_identity(destination_path.surface);
         area.release_over(
             Report {
                 stamp: 0,
                 rank: 0,
-                outcome: Outcome::Drop(TabDestination::Node(
-                    destination_path,
-                    TabInsert::Append,
-                )),
+                outcome: Outcome::Drop(TabDestination::Node(destination_path, TabInsert::Append)),
                 destination_identity,
                 destination_surface_identity: surface_identity_5,
                 insertion_order: None,
@@ -1468,8 +1497,14 @@ mod tests {
             rect,
             &mut viewer,
         );
-        assert_eq!(area.dock_state.leaf(source_path.node_path()).unwrap().tabs, ["remaining"]);
-        assert_eq!(area.dock_state.leaf(destination_path).unwrap().tabs, ["target", "source"]);
+        assert_eq!(
+            area.dock_state.leaf(source_path.node_path()).unwrap().tabs,
+            ["remaining"]
+        );
+        assert_eq!(
+            area.dock_state.leaf(destination_path).unwrap().tabs,
+            ["target", "source"]
+        );
     }
 
     #[test]
@@ -1482,7 +1517,9 @@ mod tests {
         };
         let rect = Rect::from_min_size(Pos2::ZERO, egui::vec2(200.0, 100.0));
         let session = DragSession::new(source, rect, egui::ViewportId::ROOT, Pos2::ZERO);
-        let mut viewer = Viewer { allow_windows: true };
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
         let mut area = DockArea::new(&mut dock);
         assert!(area.drag_source_valid(session.payload, &mut viewer));
 
@@ -1494,7 +1531,10 @@ mod tests {
             TabDestination::Node(root, TabInsert::Append),
             &mut viewer,
         ));
-        assert_eq!(area.dock_state.leaf(root).unwrap().tabs, ["replacement", "other"]);
+        assert_eq!(
+            area.dock_state.leaf(root).unwrap().tabs,
+            ["replacement", "other"]
+        );
     }
 
     #[test]
@@ -1505,7 +1545,9 @@ mod tests {
             path: TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(0)),
             id: Id::unique("first"),
         };
-        let mut viewer = Viewer { allow_windows: true };
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
         let mut area = DockArea::new(&mut dock);
         area.dock_state.leaf_mut(root).unwrap().append_tab("third");
         assert!(area.drag_source_valid(source, &mut viewer));
@@ -1518,11 +1560,19 @@ mod tests {
         let mut dock = DockState::new(vec!["original"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
         let mut area = DockArea::new(&mut dock);
-        let mut viewer = Viewer { allow_windows: true };
-        let id = area.dock_state.leaf_mut(root).unwrap().ensure_drag_identity();
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
+        let id = area
+            .dock_state
+            .leaf_mut(root)
+            .unwrap()
+            .ensure_drag_identity();
         let source = DragSource::Group { path: root, id };
         assert!(area.drag_source_valid(source, &mut viewer));
-        area.dock_state.main_surface_mut().remove_leaf(NodeIndex::root());
+        area.dock_state
+            .main_surface_mut()
+            .remove_leaf(NodeIndex::root());
         *area.dock_state.main_surface_mut() = crate::Tree::new(vec!["replacement"]);
         assert!(!area.drag_source_valid(source, &mut viewer));
     }
@@ -1531,16 +1581,19 @@ mod tests {
     fn stale_group_cannot_move_a_replacement_leaf() {
         let mut dock = DockState::new(vec!["original"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
-        let mut viewer = Viewer { allow_windows: true };
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
         let mut area = DockArea::new(&mut dock);
         let source = area.group_drag_source(root).unwrap();
 
         // The slot still exists, but it is no longer the leaf pressed by the user.
         *area.dock_state.main_surface_mut() = crate::Tree::new(vec!["replacement"]);
-        let [replacement, destination] = area
-            .dock_state
-            .main_surface_mut()
-            .split_right(NodeIndex::root(), 0.5, vec!["destination"]);
+        let [replacement, destination] = area.dock_state.main_surface_mut().split_right(
+            NodeIndex::root(),
+            0.5,
+            vec!["destination"],
+        );
         let target = NodePath::new(SurfaceIndex::main(), destination);
         assert!(!area.apply_move(
             source,
@@ -1559,12 +1612,14 @@ mod tests {
     #[test]
     fn group_drag_rejects_reused_leaf_index_after_tree_restructure() {
         let mut dock = DockState::new(vec!["original"]);
-        let [left, right] = dock.main_surface_mut().split_right(
-            NodeIndex::root(), 0.5, vec!["other"],
-        );
+        let [left, right] =
+            dock.main_surface_mut()
+                .split_right(NodeIndex::root(), 0.5, vec!["other"]);
         let source_path = NodePath::new(SurfaceIndex::main(), left);
         let destination = NodePath::new(SurfaceIndex::main(), right);
-        let mut viewer = Viewer { allow_windows: true };
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
         let mut area = DockArea::new(&mut dock);
         let source = area.group_drag_source(source_path).unwrap();
         assert!(area.drag_source_valid(source, &mut viewer));
@@ -1572,7 +1627,9 @@ mod tests {
         // path alone must never authorize the old drag against the new leaf.
         *area.dock_state.main_surface_mut() = crate::Tree::new(vec!["replacement"]);
         let [new_left, new_right] = area.dock_state.main_surface_mut().split_right(
-            NodeIndex::root(), 0.5, vec!["new target"],
+            NodeIndex::root(),
+            0.5,
+            vec!["new target"],
         );
         assert_eq!(left, new_left);
         assert_eq!(right, new_right);
@@ -1582,15 +1639,23 @@ mod tests {
             TabDestination::Node(destination, TabInsert::Append),
             &mut viewer,
         ));
-        assert_eq!(area.dock_state[source_path].tabs().unwrap(), &["replacement"]);
-        assert_eq!(area.dock_state[destination].tabs().unwrap(), &["new target"]);
+        assert_eq!(
+            area.dock_state[source_path].tabs().unwrap(),
+            &["replacement"]
+        );
+        assert_eq!(
+            area.dock_state[destination].tabs().unwrap(),
+            &["new target"]
+        );
     }
 
     #[test]
     fn cross_viewport_session_rejects_replaced_group_before_release() {
         let mut dock = DockState::new(vec!["original"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
-        let mut viewer = Viewer { allow_windows: true };
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
         let mut area = DockArea::new(&mut dock);
         let source = area.group_drag_source(root).unwrap();
         let rect = Rect::from_min_size(Pos2::ZERO, egui::vec2(200.0, 100.0));
@@ -1615,7 +1680,9 @@ mod tests {
         let ctx = egui::Context::default();
         let mut dock = DockState::new(vec!["original"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
-        let mut viewer = Viewer { allow_windows: true };
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
         let source = {
             let mut area = DockArea::new(&mut dock);
             area.group_drag_source(root).unwrap()
@@ -1673,7 +1740,9 @@ mod tests {
     fn stale_cross_viewport_group_session_does_not_poison_next_drag() {
         let mut dock = DockState::new(vec!["original"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
-        let mut viewer = Viewer { allow_windows: true };
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
         let rect = Rect::from_min_size(Pos2::ZERO, egui::vec2(200.0, 100.0));
         let mut area = DockArea::new(&mut dock);
         let original = area.group_drag_source(root).unwrap();
@@ -1689,10 +1758,10 @@ mod tests {
         let next = DragSession::new(fresh, rect, egui::ViewportId::ROOT, Pos2::ZERO);
         assert!(area.drag_source_valid(next.payload, &mut viewer));
 
-        let [left, right] = area
-            .dock_state
-            .main_surface_mut()
-            .split_right(NodeIndex::root(), 0.5, vec!["target"]);
+        let [left, right] =
+            area.dock_state
+                .main_surface_mut()
+                .split_right(NodeIndex::root(), 0.5, vec!["target"]);
         let left = NodePath::new(SurfaceIndex::main(), left);
         let right = NodePath::new(SurfaceIndex::main(), right);
         // Relocation invalidates even the newly retained path.
@@ -1718,7 +1787,10 @@ mod tests {
         };
         let original = Id::unique("original_handle");
         let competing = Id::unique("competing_handle");
-        let press = GroupPress { widget: original, source };
+        let press = GroupPress {
+            widget: original,
+            source,
+        };
         assert!(press.matches(original, root, id));
         assert!(!press.matches(competing, root, id));
         // A newly created leaf at the same path cannot reuse the source.
@@ -1733,7 +1805,9 @@ mod tests {
         let ctx = egui::Context::default();
         let mut dock = DockState::new(vec!["original"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
-        let mut viewer = Viewer { allow_windows: true };
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
         let area_id = Id::unique("rendered_drag_test");
         let original = {
             let mut area = DockArea::new(&mut dock);
@@ -1743,31 +1817,34 @@ mod tests {
             panic!("expected group source");
         };
 
-        let render = |events: Vec<Event>, dock: &mut DockState<&'static str>| {
+        let mut render = |events: Vec<Event>, dock: &mut DockState<&'static str>| {
             let input = RawInput {
                 events,
                 screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(800.0, 600.0))),
                 ..Default::default()
             };
             ctx.begin_pass(input);
-            egui::CentralPanel::default().show(ctx, |ui| {
-                    DockArea::new(dock)
-                        .id(area_id)
-                        .show_inside(ui, &mut viewer);
+            ctx.root_ui(|ui| {
+                egui::CentralPanel::default().show(ui, |ui| {
+                    DockArea::new(dock).id(area_id).show_inside(ui, &mut viewer);
+                });
             });
             let _ = ctx.end_pass();
         };
         render(vec![], &mut dock);
         let point = pos2(100.0, 30.0);
-        render(vec![
-            Event::PointerMoved(point),
-            Event::PointerButton {
-                pos: point,
-                button: PointerButton::Primary,
-                pressed: true,
-                modifiers: egui::Modifiers::NONE,
-            },
-        ], &mut dock);
+        render(
+            vec![
+                Event::PointerMoved(point),
+                Event::PointerButton {
+                    pos: point,
+                    button: PointerButton::Primary,
+                    pressed: true,
+                    modifiers: egui::Modifiers::NONE,
+                },
+            ],
+            &mut dock,
+        );
         render(vec![Event::PointerMoved(pos2(180.0, 30.0))], &mut dock);
 
         // Explicitly retain the original group as the active gesture. This
@@ -1788,12 +1865,15 @@ mod tests {
         assert!(cancelled.tab_drag_cancelled);
         assert!(cancelled.group_press.is_none());
         assert!(cancelled.drag_start.is_none());
-        render(vec![Event::PointerButton {
-            pos: pos2(210.0, 30.0),
-            button: PointerButton::Primary,
-            pressed: false,
-            modifiers: egui::Modifiers::NONE,
-        }], &mut dock);
+        render(
+            vec![Event::PointerButton {
+                pos: pos2(210.0, 30.0),
+                button: PointerButton::Primary,
+                pressed: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+            &mut dock,
+        );
 
         assert_eq!(dock[root].tabs().unwrap(), &["replacement"]);
         let state = State::load(&ctx, area_id);
@@ -1807,12 +1887,20 @@ mod tests {
     fn group_identity_rejects_a_leaf_relocated_to_another_path() {
         let mut dock = DockState::new(vec!["original"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
-        let mut viewer = Viewer { allow_windows: true };
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
         let mut area = DockArea::new(&mut dock);
-        let id = area.dock_state.leaf_mut(root).unwrap().ensure_drag_identity();
+        let id = area
+            .dock_state
+            .leaf_mut(root)
+            .unwrap()
+            .ensure_drag_identity();
         let source = DragSource::Group { path: root, id };
-        let [old, _new] = area.dock_state.main_surface_mut()
-            .split_right(NodeIndex::root(), 0.5, vec!["new"]);
+        let [old, _new] =
+            area.dock_state
+                .main_surface_mut()
+                .split_right(NodeIndex::root(), 0.5, vec!["new"]);
         assert_ne!(old, NodeIndex::root());
         assert!(!area.drag_source_valid(source, &mut viewer));
         let relocated = NodePath::new(SurfaceIndex::main(), old);
@@ -1823,7 +1911,9 @@ mod tests {
     fn cloned_layout_does_not_inherit_active_group_identity() {
         let mut original = DockState::new(vec!["original"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
-        let mut viewer = Viewer { allow_windows: true };
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
         let source = {
             let mut area = DockArea::new(&mut original);
             area.group_drag_source(root).unwrap()
@@ -1839,7 +1929,9 @@ mod tests {
     fn retained_group_identity_does_not_adopt_a_new_leaf_at_same_path() {
         let mut dock = DockState::new(vec!["original"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
-        let mut viewer = Viewer { allow_windows: true };
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
         let mut area = DockArea::new(&mut dock);
         let original = area.group_drag_source(root).unwrap();
         *area.dock_state.leaf_mut(root).unwrap() = crate::LeafNode::new(vec!["replacement"]);
@@ -1854,10 +1946,19 @@ mod tests {
         let mut dock = DockState::new(vec!["original"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
         let mut area = DockArea::new(&mut dock);
-        let mut viewer = Viewer { allow_windows: true };
-        let id = area.dock_state.leaf_mut(root).unwrap().ensure_drag_identity();
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
+        let id = area
+            .dock_state
+            .leaf_mut(root)
+            .unwrap()
+            .ensure_drag_identity();
         let source = DragSource::Group { path: root, id };
-        area.dock_state.leaf_mut(root).unwrap().append_tab("another");
+        area.dock_state
+            .leaf_mut(root)
+            .unwrap()
+            .append_tab("another");
         assert!(area.drag_source_valid(source, &mut viewer));
         let cloned = area.dock_state.leaf(root).unwrap().clone();
         *area.dock_state.leaf_mut(root).unwrap() = cloned;
@@ -1869,9 +1970,15 @@ mod tests {
         let mut dock = DockState::new(vec!["first"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
         let missing = NodePath::new(SurfaceIndex::main(), NodeIndex(100));
-        let mut viewer = Viewer { allow_windows: true };
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
         let mut area = DockArea::new(&mut dock);
-        let id = area.dock_state.leaf_mut(root).unwrap().ensure_drag_identity();
+        let id = area
+            .dock_state
+            .leaf_mut(root)
+            .unwrap()
+            .ensure_drag_identity();
         assert!(area.drag_source_valid(DragSource::Group { path: root, id }, &mut viewer));
         assert!(!area.drag_source_valid(DragSource::Group { path: missing, id }, &mut viewer));
         area.dock_state.leaf_mut(root).unwrap().tabs.clear();
@@ -1890,13 +1997,18 @@ mod tests {
             id: Id::unique("first"),
         };
         let destination = TabDestination::Node(right, TabInsert::Append);
-        let mut viewer = Viewer { allow_windows: true };
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
         let mut area = DockArea::new(&mut dock);
 
         // The original tab was replaced without changing the cached node or index.
         area.dock_state.leaf_mut(left).unwrap().tabs[0] = "replacement";
         assert!(!area.apply_move(source, destination, &mut viewer));
-        assert_eq!(area.dock_state.leaf(left).unwrap().tabs, ["replacement", "second"]);
+        assert_eq!(
+            area.dock_state.leaf(left).unwrap().tabs,
+            ["replacement", "second"]
+        );
         assert_eq!(area.dock_state.leaf(right).unwrap().tabs, ["target"]);
     }
 
@@ -1907,9 +2019,15 @@ mod tests {
             .split_right(NodeIndex::root(), 0.5, vec!["target"]);
         let left = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
         let right = NodePath::new(SurfaceIndex::main(), NodeIndex(2));
-        let mut viewer = Viewer { allow_windows: true };
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
         let mut area = DockArea::new(&mut dock);
-        let id = area.dock_state.leaf_mut(left).unwrap().ensure_drag_identity();
+        let id = area
+            .dock_state
+            .leaf_mut(left)
+            .unwrap()
+            .ensure_drag_identity();
         let source = DragSource::Group { path: left, id };
         let replacement = area.dock_state.leaf(left).unwrap().clone();
         *area.dock_state.leaf_mut(left).unwrap() = replacement;
@@ -1931,7 +2049,9 @@ mod tests {
             id: Id::unique("first"),
         };
         let missing = NodePath::new(SurfaceIndex::main(), NodeIndex(100));
-        let mut viewer = Viewer { allow_windows: true };
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
         let mut area = DockArea::new(&mut dock);
         assert!(!area.apply_move(
             source,
@@ -1945,22 +2065,33 @@ mod tests {
     fn moving_a_group_onto_itself_does_not_report_success() {
         let mut dock = DockState::new(vec!["first", "second"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
-        let mut viewer = Viewer { allow_windows: true };
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
         let mut area = DockArea::new(&mut dock);
-        let id = area.dock_state.leaf_mut(root).unwrap().ensure_drag_identity();
+        let id = area
+            .dock_state
+            .leaf_mut(root)
+            .unwrap()
+            .ensure_drag_identity();
         assert!(!area.apply_move(
             DragSource::Group { path: root, id },
             TabDestination::Node(root, TabInsert::Append),
             &mut viewer,
         ));
-        assert_eq!(area.dock_state.leaf(root).unwrap().tabs, ["first", "second"]);
+        assert_eq!(
+            area.dock_state.leaf(root).unwrap().tabs,
+            ["first", "second"]
+        );
     }
 
     #[test]
     fn moving_a_single_tab_within_its_only_leaf_is_a_no_op() {
         let mut dock = DockState::new(vec!["only"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
-        let mut viewer = Viewer { allow_windows: true };
+        let mut viewer = Viewer {
+            allow_windows: true,
+        };
         let mut area = DockArea::new(&mut dock);
         assert!(!area.apply_move(
             DragSource::Tab {
@@ -2049,9 +2180,10 @@ mod tests {
     #[test]
     fn reported_grid_destination_rejects_replacement_at_the_same_path() {
         let mut dock = DockState::new(vec!["one", "two", "three", "four"]);
-        assert!(dock
-            .main_surface_mut()
-            .arrange_as_grid(NodeIndex::root(), crate::GridLayout::Auto));
+        assert!(
+            dock.main_surface_mut()
+                .arrange_as_grid(NodeIndex::root(), crate::GridLayout::Auto)
+        );
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
         let mut area = DockArea::new(&mut dock);
         let identity = area.capture_destination_identity(root).unwrap();

@@ -818,8 +818,12 @@ fn replacing_a_tab_during_a_remote_drag_cancels_it() {
 
     let main = app.docked.space.dock_surface("main").unwrap();
     let path = egui_stack::NodePath::new(main, NodeIndex::root());
-    app.docked.space.state_mut().leaf_mut(path).unwrap().tabs_mut()[1] =
-        "Replacement".to_owned();
+    app.docked
+        .space
+        .state_mut()
+        .leaf_mut(path)
+        .unwrap()
+        .tabs_mut()[1] = "Replacement".to_owned();
     multi.passes(5, frame(&mut app));
     multi.release(ViewportId::ROOT, over, frame(&mut app));
     multi.passes(3, frame(&mut app));
@@ -841,13 +845,25 @@ fn replacing_a_tab_during_a_delayed_remote_release_cancels_it() {
     multi.press(ViewportId::ROOT, b, frame(&mut app));
     multi.move_held(ViewportId::ROOT, b, past, frame(&mut app));
     multi.release(ViewportId::ROOT, past, frame(&mut app));
-    assert!(app.docked.space.dragging().is_some_and(|drag| drag.released));
+    assert!(
+        app.docked
+            .space
+            .dragging()
+            .is_some_and(|drag| drag.released)
+    );
 
     let main = app.docked.space.dock_surface("main").unwrap();
     let path = egui_stack::NodePath::new(main, NodeIndex::root());
-    app.docked.space.state_mut().leaf_mut(path).unwrap().tabs_mut()[1] =
-        "Replacement".to_owned();
-    multi.queue(viewport("float-1"), Event::PointerMoved((FLOAT / 2.0).to_pos2()));
+    app.docked
+        .space
+        .state_mut()
+        .leaf_mut(path)
+        .unwrap()
+        .tabs_mut()[1] = "Replacement".to_owned();
+    multi.queue(
+        viewport("float-1"),
+        Event::PointerMoved((FLOAT / 2.0).to_pos2()),
+    );
     multi.passes(20, frame(&mut app));
     assert_eq!(tabs(&app, "main"), ["A", "Replacement"]);
     assert_eq!(tabs(&app, "float-1"), ["C"]);

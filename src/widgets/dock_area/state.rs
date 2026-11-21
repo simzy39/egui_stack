@@ -29,8 +29,7 @@ pub(super) struct GroupPress {
 impl GroupPress {
     /// A different handle or a replacement leaf must never inherit this gesture.
     pub(super) fn matches(self, widget: Id, path: NodePath, leaf_id: u64) -> bool {
-        self.widget == widget
-            && self.source == (DragSource::Group { path, id: leaf_id })
+        self.widget == widget && self.source == (DragSource::Group { path, id: leaf_id })
     }
 }
 
@@ -148,7 +147,11 @@ mod retained_source_tests {
         let other = TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(1));
         let widget = Id::unique("original_tab_widget");
         let id = Id::unique("original_tab");
-        let press = TabPress { widget, path, tab_id: id };
+        let press = TabPress {
+            widget,
+            path,
+            tab_id: id,
+        };
         assert!(press.matches(widget, path, id));
         assert!(!press.matches(Id::unique("other_widget"), path, id));
         assert!(!press.matches(widget, other, id));

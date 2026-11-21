@@ -6,11 +6,11 @@ use egui::{
 };
 
 use super::{
+    PendingFloat,
     drag_and_drop::{
         DragData, DragDropState, DragSource, HoverData, TreeComponent, make_overlay_painter,
     },
     session::Outcome,
-    PendingFloat,
     state::{GroupPress, State},
     tab_removal::TabRemoval,
 };
@@ -224,7 +224,10 @@ impl<Tab> DockArea<'_, Tab> {
 
         // A press can survive the drag threshold or a layout change. Validate it before
         // resolving any cached data, and suppress the old widget until the button is up.
-        if let Some(GroupPress { source: DragSource::Group { path, id }, .. }) = state.group_press
+        if let Some(GroupPress {
+            source: DragSource::Group { path, id },
+            ..
+        }) = state.group_press
             && !self.group_source_valid(path, id)
         {
             self.cancel_tab_drag(ui, state);
@@ -246,14 +249,10 @@ impl<Tab> DockArea<'_, Tab> {
             });
             let viewport = ui.ctx().viewport_id();
             if let Some(space) = self.space.as_mut()
-                && space
-                    .floating
-                    .session
-                    .as_ref()
-                    .is_some_and(|session| {
-                        session.source == viewport
-                            && (state.tab_drag_cancelled || session.released.is_none())
-                    })
+                && space.floating.session.as_ref().is_some_and(|session| {
+                    session.source == viewport
+                        && (state.tab_drag_cancelled || session.released.is_none())
+                })
             {
                 space.floating.session = None;
             }
@@ -309,10 +308,8 @@ impl<Tab> DockArea<'_, Tab> {
             self.forget_verdicts();
         }
         if state.dnd.as_ref().is_some_and(|dnd| {
-            !self.drag_source_valid(dnd.drag.source, tab_viewer)
-                || !self.hover_valid(&dnd.hover)
-        })
-        {
+            !self.drag_source_valid(dnd.drag.source, tab_viewer) || !self.hover_valid(&dnd.hover)
+        }) {
             state.dnd = None;
             state.window_fade = None;
         }
@@ -469,9 +466,7 @@ impl<Tab> DockArea<'_, Tab> {
                     destination => self.apply_move(source, destination, tab_viewer),
                 };
                 // A stale source or destination must not unfold a zone on a rejected drop.
-                if moved
-                    && let (Some(zone), Some(space)) = (unfold.clone(), &mut self.space)
-                {
+                if moved && let (Some(zone), Some(space)) = (unfold.clone(), &mut self.space) {
                     space.no_drop.unfolds.push(zone);
                 }
                 ui.ctx().request_repaint();
@@ -506,7 +501,8 @@ impl<Tab> DockArea<'_, Tab> {
         state.dragged_node = None;
         state.tab_in_air = None;
         ui.memory_mut(|mem| {
-            mem.data.remove_temp::<Option<DragData>>(self.id.with("drag_data"));
+            mem.data
+                .remove_temp::<Option<DragData>>(self.id.with("drag_data"));
         });
         ui.ctx().stop_dragging();
         ui.ctx().request_repaint();
@@ -878,7 +874,12 @@ impl<Tab> DockArea<'_, Tab> {
         fresh: bool,
     ) -> Option<Option<egui::WidgetText>> {
         let drag_state = state.dnd.as_ref()?;
-        self.refusal_of(&drag_state.drag.source.component(), tab_viewer, destination, fresh)
+        self.refusal_of(
+            &drag_state.drag.source.component(),
+            tab_viewer,
+            destination,
+            fresh,
+        )
     }
 
     /// The veto for `src`, a tab or a whole leaf, at `destination`; see

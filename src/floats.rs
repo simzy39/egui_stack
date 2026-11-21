@@ -1734,7 +1734,10 @@ mod viewport_lifecycle_tests {
     fn session(source: ViewportId) -> DragSession {
         let path = TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(0));
         DragSession::new(
-            DragSource::Tab { path, id: egui::Id::unique("tab") },
+            DragSource::Tab {
+                path,
+                id: egui::Id::unique("tab"),
+            },
             Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(100.0, 100.0)),
             source,
             egui::Pos2::ZERO,
@@ -1745,7 +1748,10 @@ mod viewport_lifecycle_tests {
     fn forgetting_native_float_clears_its_viewport_and_source_drag() {
         let source = ViewportId::from_hash_of("native-float");
         let mut space = DockSpace::<&'static str>::new();
-        space.floating.viewports.insert("float-1".to_owned(), source);
+        space
+            .floating
+            .viewports
+            .insert("float-1".to_owned(), source);
         space.floating.session = Some(session(source));
         space.floating.chrome.insert("float-1".to_owned(), 24.0);
         space.floating.moving.insert("float-1".to_owned());
@@ -1761,18 +1767,24 @@ mod viewport_lifecycle_tests {
         let source = ViewportId::from_hash_of("source");
         let target = ViewportId::from_hash_of("native-float");
         let mut space = DockSpace::<&'static str>::new();
-        space.floating.viewports.insert("float-1".to_owned(), target);
+        space
+            .floating
+            .viewports
+            .insert("float-1".to_owned(), target);
         let mut active = session(source);
         active.pass = 3;
-        active.reports.insert(target, Report {
-            stamp: 3,
-            rank: 1,
-            outcome: Outcome::Refused,
-            destination_identity: None,
-            destination_surface_identity: None,
-            insertion_order: None,
-            unfold: None,
-        });
+        active.reports.insert(
+            target,
+            Report {
+                stamp: 3,
+                rank: 1,
+                outcome: Outcome::Refused,
+                destination_identity: None,
+                destination_surface_identity: None,
+                insertion_order: None,
+                unfold: None,
+            },
+        );
         space.floating.session = Some(active);
         forget_native(&mut space, "float-1");
         let active = space.floating.session.as_ref().unwrap();
@@ -1796,15 +1808,18 @@ mod viewport_lifecycle_tests {
         let mut floating = Floating::default();
         let mut active = session(source);
         active.pass = 4;
-        active.reports.insert(target, Report {
-            stamp: 4,
-            rank: 1,
-            outcome: Outcome::Refused,
-            destination_identity: None,
-            destination_surface_identity: None,
-            insertion_order: None,
-            unfold: None,
-        });
+        active.reports.insert(
+            target,
+            Report {
+                stamp: 4,
+                rank: 1,
+                outcome: Outcome::Refused,
+                destination_identity: None,
+                destination_surface_identity: None,
+                insertion_order: None,
+                unfold: None,
+            },
+        );
         floating.session = Some(active);
         floating.viewport_closed(target);
         let active = floating.session.as_ref().unwrap();
@@ -1819,15 +1834,18 @@ mod viewport_lifecycle_tests {
         let mut floating = Floating::default();
         let mut active = session(source);
         active.pass = 10;
-        active.reports.insert(target, Report {
-            stamp: 2,
-            rank: 1,
-            outcome: Outcome::Refused,
-            destination_identity: None,
-            destination_surface_identity: None,
-            insertion_order: None,
-            unfold: None,
-        });
+        active.reports.insert(
+            target,
+            Report {
+                stamp: 2,
+                rank: 1,
+                outcome: Outcome::Refused,
+                destination_identity: None,
+                destination_surface_identity: None,
+                insertion_order: None,
+                unfold: None,
+            },
+        );
         floating.session = Some(active);
         floating.viewport_closed(target);
         let active = floating.session.as_ref().unwrap();
@@ -1842,15 +1860,18 @@ mod viewport_lifecycle_tests {
         let mut floating = Floating::default();
         let mut active = session(source);
         active.pass = 5;
-        active.reports.insert(target, Report {
-            stamp: 6,
-            rank: 1,
-            outcome: Outcome::Refused,
-            destination_identity: None,
-            destination_surface_identity: None,
-            insertion_order: None,
-            unfold: None,
-        });
+        active.reports.insert(
+            target,
+            Report {
+                stamp: 6,
+                rank: 1,
+                outcome: Outcome::Refused,
+                destination_identity: None,
+                destination_surface_identity: None,
+                insertion_order: None,
+                unfold: None,
+            },
+        );
         floating.session = Some(active);
         floating.viewport_closed(target);
         let active = floating.session.as_ref().unwrap();
@@ -1865,15 +1886,18 @@ mod viewport_lifecycle_tests {
         let mut floating = Floating::default();
         let mut active = session(source);
         active.pass = u64::MAX;
-        active.reports.insert(target, Report {
-            stamp: u64::MAX,
-            rank: 1,
-            outcome: Outcome::Refused,
-            destination_identity: None,
-            destination_surface_identity: None,
-            insertion_order: None,
-            unfold: None,
-        });
+        active.reports.insert(
+            target,
+            Report {
+                stamp: u64::MAX,
+                rank: 1,
+                outcome: Outcome::Refused,
+                destination_identity: None,
+                destination_surface_identity: None,
+                insertion_order: None,
+                unfold: None,
+            },
+        );
         floating.session = Some(active);
         floating.viewport_closed(target);
         let active = floating.session.as_ref().unwrap();

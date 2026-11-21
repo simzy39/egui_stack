@@ -77,7 +77,10 @@ struct SurfaceSlot<Tab> {
 
 impl<Tab> SurfaceSlot<Tab> {
     fn new(surface: Surface<Tab>) -> Self {
-        Self { surface, identity: 0 }
+        Self {
+            surface,
+            identity: 0,
+        }
     }
 }
 
@@ -237,7 +240,10 @@ impl<Tab> DockState<Tab> {
     /// dock of a [`DockSpace`](crate::DockSpace).
     #[inline]
     pub(crate) fn is_window(&self, surface: SurfaceIndex) -> bool {
-        matches!(self.surfaces.get(surface.0).map(|slot| &slot.surface), Some(Surface::Window(..)))
+        matches!(
+            self.surfaces.get(surface.0).map(|slot| &slot.surface),
+            Some(Surface::Window(..))
+        )
     }
 
     /// Capture the identity of a surface slot, including a vacant slot, assigning one on first use.
@@ -316,7 +322,9 @@ impl<Tab> DockState<Tab> {
     #[inline]
     pub fn get_surface_mut(&mut self, surface: SurfaceIndex) -> Option<&mut Surface<Tab>> {
         self.invalidate_surface_identity(surface);
-        self.surfaces.get_mut(surface.0).map(|slot| &mut slot.surface)
+        self.surfaces
+            .get_mut(surface.0)
+            .map(|slot| &mut slot.surface)
     }
 
     /// Get an immutable borrow to the raw surface from a surface index.
@@ -352,9 +360,7 @@ impl<Tab> DockState<Tab> {
     /// Repeated removals are idempotent and cannot remove a later surface that
     /// happens to reuse the same slot.
     pub fn remove_surface(&mut self, surface_index: SurfaceIndex) -> Option<Surface<Tab>> {
-        if surface_index.is_main()
-            || !self.is_surface_valid(surface_index)
-        {
+        if surface_index.is_main() || !self.is_surface_valid(surface_index) {
             return None;
         }
         if self.focused_surface == Some(surface_index) {
@@ -386,8 +392,7 @@ impl<Tab> DockState<Tab> {
             .tabs
             .get(path.tab.0)
             .ok_or(Error::InvalidTab)?;
-        self.leaf_mut(path.node_path())?
-            .set_active_tab(path.tab)?;
+        self.leaf_mut(path.node_path())?.set_active_tab(path.tab)?;
         Ok(())
     }
 
@@ -432,7 +437,8 @@ impl<Tab> DockState<Tab> {
     pub fn leaf_mut(&mut self, path: NodePath) -> Result<&mut LeafNode<Tab>> {
         // A non-leaf lookup must not invalidate an otherwise unchanged slot.
         self.leaf(path)?;
-        Ok(self.node_mut(path)?
+        Ok(self
+            .node_mut(path)?
             .get_leaf_mut()
             .expect("validated leaf node"))
     }
@@ -451,16 +457,16 @@ impl<Tab> DockState<Tab> {
     /// Whether a destination can accept a move without clamping a stale tab index.
     pub(crate) fn valid_move_destination(&self, destination: &TabDestination) -> bool {
         match *destination {
-            TabDestination::Node(path, TabInsert::Split(_)) => self
-                .node(path)
-                .is_ok_and(|node| !node.is_empty()),
-            TabDestination::Node(path, TabInsert::Insert(index)) => self
-                .leaf(path)
-                .is_ok_and(|leaf| index.0 <= leaf.tabs.len()),
+            TabDestination::Node(path, TabInsert::Split(_)) => {
+                self.node(path).is_ok_and(|node| !node.is_empty())
+            }
+            TabDestination::Node(path, TabInsert::Insert(index)) => {
+                self.leaf(path).is_ok_and(|leaf| index.0 <= leaf.tabs.len())
+            }
             TabDestination::Node(path, TabInsert::Append) => self.leaf(path).is_ok(),
-            TabDestination::EmptySurface(surface) => self
-                .get_surface(surface)
-                .is_some_and(Surface::is_empty),
+            TabDestination::EmptySurface(surface) => {
+                self.get_surface(surface).is_some_and(Surface::is_empty)
+            }
             TabDestination::Window(rect) => {
                 rect.min.x.is_finite()
                     && rect.min.y.is_finite()
@@ -468,7 +474,7 @@ impl<Tab> DockState<Tab> {
                     && rect.max.y.is_finite()
                     && rect.width() > 0.0
                     && rect.height() > 0.0
-            },
+            }
         }
     }
 
@@ -485,9 +491,8 @@ impl<Tab> DockState<Tab> {
         }
         let insertion = match &destination {
             TabDestination::Node(path, TabInsert::Insert(index)) => {
-                let preceding_source = source_tab.is_some_and(|source| {
-                    source.node_path() == *path && source.tab.0 < index.0
-                });
+                let preceding_source = source_tab
+                    .is_some_and(|source| source.node_path() == *path && source.tab.0 < index.0);
                 Some(index.0 - usize::from(preceding_source))
             }
             TabDestination::Node(path, TabInsert::Append) => {
@@ -497,7 +502,10 @@ impl<Tab> DockState<Tab> {
             }
             _ => None,
         };
-        Some(PreparedDestination { destination, insertion })
+        Some(PreparedDestination {
+            destination,
+            insertion,
+        })
     }
 
     /// Moves a whole leaf, all its tabs in their order, as a tab is moved: into another leaf's
@@ -531,7 +539,10 @@ impl<Tab> DockState<Tab> {
         let Some(plan) = self.prepare_destination(dst, None) else {
             return false;
         };
-        let PreparedDestination { destination: dst, insertion } = plan;
+        let PreparedDestination {
+            destination: dst,
+            insertion,
+        } = plan;
         let leaf = self.leaf_mut(src).expect("preflighted source leaf");
         let active = leaf.active.0.min(leaf.tabs.len() - 1);
         let tabs = std::mem::take(&mut leaf.tabs);
@@ -559,8 +570,7 @@ impl<Tab> DockState<Tab> {
                     if let Some(leaf) = node.get_leaf_mut() {
                         leaf.active = TabIndex(active);
                     }
-                    let [old_node, _new_node] =
-                        self[d.surface].split(d.node, split, 0.5, node);
+                    let [old_node, _new_node] = self[d.surface].split(d.node, split, 0.5, node);
                     if d == cleanup_source {
                         cleanup_source.node = old_node;
                     }
@@ -614,9 +624,7 @@ impl<Tab> DockState<Tab> {
             return false;
         }
         match insert {
-            TabInsert::Insert(index) => {
-                index.0 == src.tab.0 || index.0 == src.tab.0 + 1
-            }
+            TabInsert::Insert(index) => index.0 == src.tab.0 || index.0 == src.tab.0 + 1,
             TabInsert::Append => src.tab.0 + 1 == count,
             TabInsert::Split(_) => count == 1,
         }
@@ -626,7 +634,10 @@ impl<Tab> DockState<Tab> {
     /// Returns false without changing the tree when the move is invalid or a no-op.
     pub fn move_tab(&mut self, src: TabPath, dst_tab: impl Into<TabDestination>) -> bool {
         let destination = dst_tab.into();
-        if self.leaf(src.node_path()).map_or(true, |leaf| src.tab.0 >= leaf.tabs.len()) {
+        if self
+            .leaf(src.node_path())
+            .map_or(true, |leaf| src.tab.0 >= leaf.tabs.len())
+        {
             return false;
         }
         if self.tab_move_is_noop(src, &destination) {
@@ -635,7 +646,10 @@ impl<Tab> DockState<Tab> {
         let Some(plan) = self.prepare_destination(destination, Some(src)) else {
             return false;
         };
-        let PreparedDestination { destination, insertion } = plan;
+        let PreparedDestination {
+            destination,
+            insertion,
+        } = plan;
         // Splitting the root relocates its old leaf to a newly allocated node.
         // Track that relocation so cleanup never targets the new container.
         let mut cleanup_source = src.node_path();
@@ -666,7 +680,8 @@ impl<Tab> DockState<Tab> {
             TabDestination::EmptySurface(dst_surface) => {
                 let tab = self[src.node_path()].remove_tab(src.tab).unwrap();
                 self.invalidate_surface_identity(dst_surface);
-                self.surfaces[dst_surface.0] = SurfaceSlot::new(Surface::Main(Tree::new(vec![tab])));
+                self.surfaces[dst_surface.0] =
+                    SurfaceSlot::new(Surface::Main(Tree::new(vec![tab])));
             }
         }
         self.cleanup_moved_source(cleanup_source);
@@ -691,7 +706,8 @@ impl<Tab> DockState<Tab> {
         tab_viewer: &mut impl TabViewer<Tab = Tab>,
     ) -> Result<OnCloseResponse> {
         // Reject invalid paths before granting mutable access to the slot.
-        let tab = self.leaf(path.node_path())?
+        let tab = self
+            .leaf(path.node_path())?
             .tabs
             .get(path.tab.0)
             .ok_or(Error::InvalidTab)?;
@@ -763,10 +779,7 @@ impl<Tab> DockState<Tab> {
     ///
     /// Returns the new window's surface index, or `None` for an invalid tab path.
     pub fn eject_tab(&mut self, path: TabPath, position: Pos2) -> Option<SurfaceIndex> {
-        self.leaf(path.node_path())
-            .ok()?
-            .tabs
-            .get(path.tab.0)?;
+        self.leaf(path.node_path()).ok()?.tabs.get(path.tab.0)?;
         let size = self[path.node_path()]
             .rect()
             .map_or(Vec2::new(100., 150.), |rect| rect.size());
@@ -1257,14 +1270,8 @@ mod test {
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
         let before = dock.surfaces.len();
         let focus = dock.focused_leaf();
-        assert!(!dock.remove_leaf(NodePath::new(
-            SurfaceIndex::main(),
-            NodeIndex(999),
-        )));
-        assert!(!dock.remove_leaf(NodePath::new(
-            SurfaceIndex(999),
-            NodeIndex::root(),
-        )));
+        assert!(!dock.remove_leaf(NodePath::new(SurfaceIndex::main(), NodeIndex(999),)));
+        assert!(!dock.remove_leaf(NodePath::new(SurfaceIndex(999), NodeIndex::root(),)));
         assert_eq!(dock.surfaces.len(), before);
         assert_eq!(dock.focused_leaf(), focus);
         assert_eq!(dock.leaf(root).unwrap().tabs, ["first", "second"]);
@@ -1313,10 +1320,8 @@ mod test {
         let mut dock = DockState::new(vec!["first", "second"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
         let surfaces_before = dock.surfaces.len();
-        let window = TabDestination::Window(Rect::from_min_size(
-            Pos2::ZERO,
-            Vec2::new(320.0, 240.0),
-        ));
+        let window =
+            TabDestination::Window(Rect::from_min_size(Pos2::ZERO, Vec2::new(320.0, 240.0)));
         for path in [
             TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(99)),
             TabPath::new(SurfaceIndex::main(), NodeIndex(999), TabIndex(0)),
@@ -1431,15 +1436,23 @@ mod test {
     fn cloning_dock_state_does_not_copy_runtime_surface_identity() {
         let mut original = DockState::new(vec!["main"]);
         let extra = original.add_window(vec!["other"]);
-        let main_id = original.capture_surface_identity(SurfaceIndex::main()).unwrap();
+        let main_id = original
+            .capture_surface_identity(SurfaceIndex::main())
+            .unwrap();
         let extra_id = original.capture_surface_identity(extra).unwrap();
 
         let mut cloned = original.clone();
         assert_eq!(cloned.current_surface_identity(SurfaceIndex::main()), None);
         assert_eq!(cloned.current_surface_identity(extra), None);
-        assert_ne!(cloned.capture_surface_identity(SurfaceIndex::main()), Some(main_id));
+        assert_ne!(
+            cloned.capture_surface_identity(SurfaceIndex::main()),
+            Some(main_id)
+        );
         assert_ne!(cloned.capture_surface_identity(extra), Some(extra_id));
-        assert_eq!(original.current_surface_identity(SurfaceIndex::main()), Some(main_id));
+        assert_eq!(
+            original.current_surface_identity(SurfaceIndex::main()),
+            Some(main_id)
+        );
         assert_eq!(original.current_surface_identity(extra), Some(extra_id));
     }
 
@@ -1458,7 +1471,10 @@ mod test {
         assert_eq!(restored.current_surface_identity(main), None);
         assert_eq!(restored.current_surface_identity(other), None);
         assert_ne!(restored.capture_surface_identity(main), Some(original_main));
-        assert_ne!(restored.capture_surface_identity(other), Some(original_other));
+        assert_ne!(
+            restored.capture_surface_identity(other),
+            Some(original_other)
+        );
         assert!(restored.find_tab(&"main").is_some());
         assert!(restored.find_tab(&"other").is_some());
     }
@@ -1492,9 +1508,9 @@ mod test {
     fn moving_nested_leaf_beside_root_preserves_other_subtrees() {
         let mut dock = DockState::new(vec!["a"]);
         let main = SurfaceIndex::main();
-        let [_left, right] = dock
-            .main_surface_mut()
-            .split_right(NodeIndex::root(), 0.5, vec!["b", "c"]);
+        let [_left, right] =
+            dock.main_surface_mut()
+                .split_right(NodeIndex::root(), 0.5, vec!["b", "c"]);
         let source = NodePath::new(main, right);
         let root = NodePath::MAIN_ROOT;
         assert!(dock.move_node(
@@ -1511,9 +1527,9 @@ mod test {
     fn moving_nested_tab_beside_root_preserves_other_subtrees() {
         let mut dock = DockState::new(vec!["a"]);
         let main = SurfaceIndex::main();
-        let [_left, right] = dock
-            .main_surface_mut()
-            .split_right(NodeIndex::root(), 0.5, vec!["b", "c"]);
+        let [_left, right] =
+            dock.main_surface_mut()
+                .split_right(NodeIndex::root(), 0.5, vec!["b", "c"]);
         assert!(dock.move_tab(
             TabPath::new(main, right, TabIndex(0)),
             TabDestination::Node(NodePath::MAIN_ROOT, TabInsert::Split(Split::Below)),
@@ -1531,12 +1547,12 @@ mod test {
         let source = TabPath::new(source_surface, NodeIndex::root(), TabIndex(0));
         let destination = NodePath::MAIN_ROOT;
 
-        assert!(dock.move_tab(
-            source,
-            TabDestination::Node(destination, TabInsert::Append),
-        ));
+        assert!(dock.move_tab(source, TabDestination::Node(destination, TabInsert::Append),));
         assert_eq!(dock.leaf(destination).unwrap().tabs, ["main", "moving"]);
-        assert!(dock.get_surface(source_surface).is_none_or(Surface::is_empty));
+        assert!(
+            dock.get_surface(source_surface)
+                .is_none_or(Surface::is_empty)
+        );
         assert_eq!(dock.iter_all_tabs().count(), 2);
     }
 
@@ -1547,15 +1563,15 @@ mod test {
         let source = NodePath::new(source_surface, NodeIndex::root());
         let destination = NodePath::MAIN_ROOT;
 
-        assert!(dock.move_node(
-            source,
-            TabDestination::Node(destination, TabInsert::Append),
-        ));
+        assert!(dock.move_node(source, TabDestination::Node(destination, TabInsert::Append),));
         assert_eq!(
             dock.leaf(destination).unwrap().tabs,
             ["main", "moving", "other"],
         );
-        assert!(dock.get_surface(source_surface).is_none_or(Surface::is_empty));
+        assert!(
+            dock.get_surface(source_surface)
+                .is_none_or(Surface::is_empty)
+        );
         assert_eq!(dock.iter_all_tabs().count(), 3);
     }
 
@@ -1622,10 +1638,7 @@ mod test {
         let mut dock = DockState::new(vec!["a", "b"]);
         let main = SurfaceIndex::main();
         let id = dock.capture_surface_identity(main).unwrap();
-        let invalid = Rect::from_min_size(
-            Pos2::new(f32::NAN, 0.0),
-            Vec2::new(200.0, 100.0),
-        );
+        let invalid = Rect::from_min_size(Pos2::new(f32::NAN, 0.0), Vec2::new(200.0, 100.0));
         assert!(!dock.move_tab(
             TabPath::new(main, NodeIndex::root(), TabIndex(0)),
             TabDestination::Window(invalid),
@@ -1679,10 +1692,7 @@ mod test {
 
         assert!(!dock.move_tab(
             TabPath::new(main, NodeIndex::root(), TabIndex(99)),
-            TabDestination::Node(
-                NodePath::new(other, NodeIndex::root()),
-                TabInsert::Append,
-            ),
+            TabDestination::Node(NodePath::new(other, NodeIndex::root()), TabInsert::Append,),
         ));
         assert_eq!(dock.current_surface_identity(main), Some(main_id));
         assert_eq!(dock.current_surface_identity(other), Some(other_id));
@@ -1692,17 +1702,17 @@ mod test {
     #[test]
     fn moving_group_to_split_preserves_destination_and_removes_source_leaf() {
         let mut dock = DockState::new(vec!["a", "b"]);
-        let [left, right] = dock
-            .main_surface_mut()
-            .split_right(NodeIndex::root(), 0.5, vec!["c", "d"]);
+        let [left, right] =
+            dock.main_surface_mut()
+                .split_right(NodeIndex::root(), 0.5, vec!["c", "d"]);
         let main = SurfaceIndex::main();
         let source = NodePath::new(main, right);
         let target = NodePath::new(main, left);
 
-        assert!(dock.move_node(source, TabDestination::Node(
-            target,
-            TabInsert::Split(Split::Right),
-        )));
+        assert!(dock.move_node(
+            source,
+            TabDestination::Node(target, TabInsert::Split(Split::Right),)
+        ));
         assert_eq!(dock.iter_all_tabs().count(), 4);
         assert!(dock.find_tab(&"a").is_some());
         assert!(dock.find_tab(&"b").is_some());
@@ -1720,10 +1730,7 @@ mod test {
 
         assert!(dock.move_tab(
             TabPath::new(main, NodeIndex::root(), TabIndex(0)),
-            TabDestination::Node(
-                NodePath::new(other, NodeIndex::root()),
-                TabInsert::Append,
-            ),
+            TabDestination::Node(NodePath::new(other, NodeIndex::root()), TabInsert::Append,),
         ));
         assert_eq!(dock.current_surface_identity(main), None);
         assert_eq!(dock.current_surface_identity(other), None);
@@ -1853,9 +1860,9 @@ mod test {
     #[test]
     fn splitting_ancestor_of_source_keeps_other_branches() {
         let mut dock = DockState::new(vec!["source"]);
-        let [left, _right] = dock.main_surface_mut().split_right(
-            NodeIndex::root(), 0.5, vec!["other"],
-        );
+        let [left, _right] =
+            dock.main_surface_mut()
+                .split_right(NodeIndex::root(), 0.5, vec!["other"]);
         let source = TabPath::new(SurfaceIndex::main(), left, TabIndex(0));
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
         assert!(dock.move_tab(
@@ -1897,9 +1904,9 @@ mod test {
     #[test]
     fn moving_group_into_split_of_ancestor_preserves_every_tab() {
         let mut dock = DockState::new(vec!["first", "second"]);
-        let [left, _right] = dock.main_surface_mut().split_right(
-            NodeIndex::root(), 0.5, vec!["other"],
-        );
+        let [left, _right] =
+            dock.main_surface_mut()
+                .split_right(NodeIndex::root(), 0.5, vec!["other"]);
         let source = NodePath::new(SurfaceIndex::main(), left);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
         dock.leaf_mut(source).unwrap().active = TabIndex(1);
@@ -1920,9 +1927,9 @@ mod test {
     #[test]
     fn splitting_another_leaf_keeps_source_cleanup_and_destination_intact() {
         let mut dock = DockState::new(vec!["source"]);
-        let [left, right] = dock.main_surface_mut().split_right(
-            NodeIndex::root(), 0.5, vec!["destination"],
-        );
+        let [left, right] =
+            dock.main_surface_mut()
+                .split_right(NodeIndex::root(), 0.5, vec!["destination"]);
         let source = TabPath::new(SurfaceIndex::main(), left, TabIndex(0));
         let destination = NodePath::new(SurfaceIndex::main(), right);
         assert!(dock.move_tab(
@@ -1941,9 +1948,9 @@ mod test {
     #[test]
     fn splitting_group_into_another_leaf_preserves_all_tabs_and_active_selection() {
         let mut dock = DockState::new(vec!["first", "second"]);
-        let [left, right] = dock.main_surface_mut().split_right(
-            NodeIndex::root(), 0.5, vec!["destination"],
-        );
+        let [left, right] =
+            dock.main_surface_mut()
+                .split_right(NodeIndex::root(), 0.5, vec!["destination"]);
         let source = NodePath::new(SurfaceIndex::main(), left);
         let destination = NodePath::new(SurfaceIndex::main(), right);
         dock.leaf_mut(source).unwrap().active = TabIndex(1);
@@ -2036,14 +2043,8 @@ mod test {
         let invalid = NodePath::new(SurfaceIndex::main(), NodeIndex(999));
         let tab = TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(0));
 
-        assert!(!dock.move_node(
-            root,
-            TabDestination::Node(invalid, TabInsert::Append),
-        ));
-        assert!(!dock.move_tab(
-            tab,
-            TabDestination::Node(invalid, TabInsert::Append),
-        ));
+        assert!(!dock.move_node(root, TabDestination::Node(invalid, TabInsert::Append),));
+        assert!(!dock.move_tab(tab, TabDestination::Node(invalid, TabInsert::Append),));
         assert!(!dock.move_tab(
             TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(999)),
             TabDestination::Node(root, TabInsert::Append),
@@ -2055,10 +2056,7 @@ mod test {
     fn same_leaf_group_move_is_a_noop() {
         let mut dock = DockState::new(vec!["first", "second"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
-        assert!(!dock.move_node(
-            root,
-            TabDestination::Node(root, TabInsert::Append),
-        ));
+        assert!(!dock.move_node(root, TabDestination::Node(root, TabInsert::Append),));
         assert_eq!(dock.leaf(root).unwrap().tabs, ["first", "second"]);
     }
 
@@ -2126,9 +2124,9 @@ mod test {
     #[test]
     fn rejected_group_move_does_not_consume_source_tabs() {
         let mut dock = DockState::new(vec!["a", "b"]);
-        let [left, right] = dock.main_surface_mut().split_right(
-            NodeIndex::root(), 0.5, vec!["c"],
-        );
+        let [left, right] = dock
+            .main_surface_mut()
+            .split_right(NodeIndex::root(), 0.5, vec!["c"]);
         let source = NodePath::new(SurfaceIndex::main(), left);
         let destination = NodePath::new(SurfaceIndex::main(), right);
         assert!(!dock.move_node(
@@ -2142,9 +2140,9 @@ mod test {
     #[test]
     fn moving_group_between_leaves_preserves_active_member() {
         let mut dock = DockState::new(vec!["a", "b"]);
-        let [left, right] = dock.main_surface_mut().split_right(
-            NodeIndex::root(), 0.5, vec!["c"],
-        );
+        let [left, right] = dock
+            .main_surface_mut()
+            .split_right(NodeIndex::root(), 0.5, vec!["c"]);
         let source = NodePath::new(SurfaceIndex::main(), left);
         let destination = NodePath::new(SurfaceIndex::main(), right);
         dock.leaf_mut(source).unwrap().active = TabIndex(1);
@@ -2175,12 +2173,27 @@ mod test {
         let removed = dock.remove_surface(second).unwrap();
         assert!(removed.node_tree().is_some());
         assert!(dock.get_surface(second).unwrap().is_empty());
-        assert_eq!(dock.leaf(NodePath::new(first, NodeIndex::root())).unwrap().tabs, ["first"]);
-        assert_eq!(dock.leaf(NodePath::new(third, NodeIndex::root())).unwrap().tabs, ["third"]);
+        assert_eq!(
+            dock.leaf(NodePath::new(first, NodeIndex::root()))
+                .unwrap()
+                .tabs,
+            ["first"]
+        );
+        assert_eq!(
+            dock.leaf(NodePath::new(third, NodeIndex::root()))
+                .unwrap()
+                .tabs,
+            ["third"]
+        );
         assert_eq!(dock.focused_leaf().unwrap().surface, third);
         let reused = dock.add_docked_surface(Tree::new(vec!["replacement"]));
         assert_eq!(reused, second);
-        assert_eq!(dock.leaf(NodePath::new(third, NodeIndex::root())).unwrap().tabs, ["third"]);
+        assert_eq!(
+            dock.leaf(NodePath::new(third, NodeIndex::root()))
+                .unwrap()
+                .tabs,
+            ["third"]
+        );
     }
 
     #[test]

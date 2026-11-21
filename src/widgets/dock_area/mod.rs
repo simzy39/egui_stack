@@ -18,11 +18,11 @@ pub use drop_zone::DropZone;
 pub use group_handles::GroupHandles;
 use std::panic::AssertUnwindSafe;
 
+use drag_and_drop::DragSource;
 use egui::{Context, Id, Modifiers, Response, Ui, emath::*};
 pub use labels::Labels;
 pub use session::{DragPayload, SpaceDrag};
 use tab_removal::TabRemoval;
-use drag_and_drop::DragSource;
 
 use crate::{
     DockPainter, DockSpace, NodePath, Style, StylePainter, TabIndex, TabPath,
@@ -206,7 +206,12 @@ impl DockArea<'_, ()> {
         if response.is_pointer_button_down_on() && ui.input(|i| i.pointer.primary_pressed()) {
             ui.data_mut(|d| {
                 let key = BodyLeaf::press_id(body.dock_area);
-                BodyLeaf::retain_first_request(d, key, ui.ctx().cumulative_pass_nr(), (body.source, response.id));
+                BodyLeaf::retain_first_request(
+                    d,
+                    key,
+                    ui.ctx().cumulative_pass_nr(),
+                    (body.source, response.id),
+                );
             });
         }
         let dragged = response.dragged() && ui.input(|i| i.pointer.is_decidedly_dragging());
@@ -214,7 +219,12 @@ impl DockArea<'_, ()> {
             ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::Grabbing);
             ui.data_mut(|d| {
                 let key = BodyLeaf::request_id(body.dock_area);
-                BodyLeaf::retain_first_request(d, key, ui.ctx().cumulative_pass_nr(), (body.source, response.id));
+                BodyLeaf::retain_first_request(
+                    d,
+                    key,
+                    ui.ctx().cumulative_pass_nr(),
+                    (body.source, response.id),
+                );
             });
         } else if response.hovered() && ui.ctx().dragged_id().is_none() {
             ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::Grab);
@@ -494,7 +504,10 @@ mod custom_handle_request_tests {
         let key = BodyLeaf::press_id(Id::unique("dock"));
         let owner = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
         let other = NodePath::new(SurfaceIndex::main(), NodeIndex(2));
-        let source = DragSource::Group { path: owner, id: 123 };
+        let source = DragSource::Group {
+            path: owner,
+            id: 123,
+        };
         let widget = Id::unique("owner-handle");
 
         ctx.data_mut(|data| {

@@ -231,7 +231,6 @@ mod removal_tests {
     }
 }
 
-
 #[cfg(test)]
 mod drag_identity_tests {
     use super::*;

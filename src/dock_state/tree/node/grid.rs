@@ -389,10 +389,7 @@ mod drag_identity_tests {
 
     #[test]
     fn cloning_a_grid_node_assigns_a_fresh_runtime_identity() {
-        let mut original = GridNode::new(
-            GridLayout::Auto,
-            vec![NodeIndex(1), NodeIndex(2)],
-        );
+        let mut original = GridNode::new(GridLayout::Auto, vec![NodeIndex(1), NodeIndex(2)]);
         let original_id = original.ensure_drag_identity();
         let mut cloned = original.clone();
 

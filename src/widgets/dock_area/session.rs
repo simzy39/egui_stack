@@ -105,18 +105,18 @@ impl DragSession {
     /// A tab drag must be restarted after replacing its owning DockSpace.
     pub(crate) fn source_in(&self, state: &crate::DockState<impl Sized>) -> bool {
         match self.payload {
-            DragSource::Group { path, id } => id != 0 && state.leaf(path).is_ok_and(|leaf| leaf.drag_identity == id && !leaf.tabs.is_empty()),
+            DragSource::Group { path, id } => {
+                id != 0
+                    && state
+                        .leaf(path)
+                        .is_ok_and(|leaf| leaf.drag_identity == id && !leaf.tabs.is_empty())
+            }
             DragSource::Tab { .. } => false,
         }
     }
 
     /// A session for a payload dragged in the source viewport.
-    pub(crate) fn new(
-        payload: DragSource,
-        rect: Rect,
-        source: ViewportId,
-        local: Pos2,
-    ) -> Self {
+    pub(crate) fn new(payload: DragSource, rect: Rect, source: ViewportId, local: Pos2) -> Self {
         Self {
             payload,
             rect,
@@ -133,9 +133,7 @@ impl DragSession {
 
     /// A report is current for the source's present or immediately preceding pass.
     pub(crate) fn report_is_current(&self, viewport: ViewportId, report: &Report) -> bool {
-        viewport != self.source
-            && report.stamp <= self.pass
-            && self.pass - report.stamp <= 1
+        viewport != self.source && report.stamp <= self.pass && self.pass - report.stamp <= 1
     }
 
     /// The report of another viewport a release in the source goes by: the freshest reports
@@ -228,15 +226,18 @@ mod recency_tests {
         drag.pass = u64::MAX;
         drag.outside = true;
         let remote = ViewportId::from_hash_of("remote");
-        drag.reports.insert(remote, Report {
-            stamp: u64::MAX,
-            rank: 1,
-            outcome: Outcome::Refused,
-            destination_identity: None,
-            destination_surface_identity: None,
-            insertion_order: None,
-            unfold: None,
-        });
+        drag.reports.insert(
+            remote,
+            Report {
+                stamp: u64::MAX,
+                rank: 1,
+                outcome: Outcome::Refused,
+                destination_identity: None,
+                destination_surface_identity: None,
+                insertion_order: None,
+                unfold: None,
+            },
+        );
         assert!(drag.remote(0).is_some());
         assert_eq!(drag.dragged().unwrap().over, Some(remote));
     }
@@ -246,24 +247,30 @@ mod recency_tests {
         let mut drag = session();
         drag.pass = 5;
         drag.outside = true;
-        drag.reports.insert(drag.source, Report {
-            stamp: 5,
-            rank: 100,
-            outcome: Outcome::Refused,
-            destination_identity: None,
-            destination_surface_identity: None,
-            insertion_order: None,
-            unfold: None,
-        });
-        drag.reports.insert(ViewportId::from_hash_of("future"), Report {
-            stamp: 6,
-            rank: 50,
-            outcome: Outcome::Refused,
-            destination_identity: None,
-            destination_surface_identity: None,
-            insertion_order: None,
-            unfold: None,
-        });
+        drag.reports.insert(
+            drag.source,
+            Report {
+                stamp: 5,
+                rank: 100,
+                outcome: Outcome::Refused,
+                destination_identity: None,
+                destination_surface_identity: None,
+                insertion_order: None,
+                unfold: None,
+            },
+        );
+        drag.reports.insert(
+            ViewportId::from_hash_of("future"),
+            Report {
+                stamp: 6,
+                rank: 50,
+                outcome: Outcome::Refused,
+                destination_identity: None,
+                destination_surface_identity: None,
+                insertion_order: None,
+                unfold: None,
+            },
+        );
         assert!(drag.remote(0).is_none());
         assert!(drag.dragged().unwrap().over.is_none());
     }
@@ -273,15 +280,18 @@ mod recency_tests {
         let mut drag = session();
         drag.pass = 10;
         drag.outside = true;
-        drag.reports.insert(ViewportId::from_hash_of("old"), Report {
-            stamp: 2,
-            rank: 1,
-            outcome: Outcome::Refused,
-            destination_identity: None,
-            destination_surface_identity: None,
-            insertion_order: None,
-            unfold: None,
-        });
+        drag.reports.insert(
+            ViewportId::from_hash_of("old"),
+            Report {
+                stamp: 2,
+                rank: 1,
+                outcome: Outcome::Refused,
+                destination_identity: None,
+                destination_surface_identity: None,
+                insertion_order: None,
+                unfold: None,
+            },
+        );
         assert!(drag.remote(0).is_none());
         assert!(drag.dragged().unwrap().over.is_none());
     }

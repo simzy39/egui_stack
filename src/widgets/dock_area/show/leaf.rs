@@ -5,7 +5,6 @@ use egui::{
     vec2,
 };
 
-use crate::{NodePath, TabPath};
 use crate::dock_area::BodyLeaf;
 use crate::dock_area::tab_removal::{ForcedRemoval, TabRemoval};
 use crate::node::LeafNode;
@@ -21,6 +20,7 @@ use crate::{
     utils::{fade_visuals, rect_set_size_centered},
     widgets::painter::{Attached, corners_within},
 };
+use crate::{NodePath, TabPath};
 
 fn tab_body_id(dock_area_id: Id, path: NodePath, tab_id: Id) -> Id {
     dock_area_id.with((path.surface, "surface")).with(tab_id)
@@ -190,14 +190,8 @@ impl<Tab> DockArea<'_, Tab> {
         // Body handles report their press separately from drag activation.
         let press_request = BodyLeaf::press_id(self.id);
         if let Some((source, handle_id)) = ui.data_mut(|d| {
-            BodyLeaf::take_request_for_leaf(
-                d,
-                press_request,
-                ui.ctx().cumulative_pass_nr(),
-                path,
-            )
-        })
-            && self.draggable_tabs
+            BodyLeaf::take_request_for_leaf(d, press_request, ui.ctx().cumulative_pass_nr(), path)
+        }) && self.draggable_tabs
             && ui.input(|i| i.pointer.primary_down())
             && state.group_press.is_none()
             && state.tab_press.is_none()
@@ -220,8 +214,7 @@ impl<Tab> DockArea<'_, Tab> {
         let request = BodyLeaf::request_id(self.id);
         if let Some((source, handle_id)) = ui.data_mut(|d| {
             BodyLeaf::take_request_for_leaf(d, request, ui.ctx().cumulative_pass_nr(), path)
-        })
-            && self.draggable_tabs
+        }) && self.draggable_tabs
         {
             // A later drag request cannot target a replacement leaf or a
             // different handle, even when the node path has been reused.
@@ -401,7 +394,13 @@ impl<Tab> DockArea<'_, Tab> {
                         .get_leaf()
                         .expect("This node must be a leaf")
                         .active;
-                    self.try_initiate_tab_drag(ui, state, drag_id, (path, active).into(), tab_viewer);
+                    self.try_initiate_tab_drag(
+                        ui,
+                        state,
+                        drag_id,
+                        (path, active).into(),
+                        tab_viewer,
+                    );
                 }
             }
         }
@@ -951,7 +950,13 @@ impl<Tab> DockArea<'_, Tab> {
                 if carries_group {
                     self.remember_group_press(tabs_ui, state, id, path);
                 } else {
-                    self.remember_tab_press(tabs_ui, state, id, (path, tab_index).into(), tab_viewer);
+                    self.remember_tab_press(
+                        tabs_ui,
+                        state,
+                        id,
+                        (path, tab_index).into(),
+                        tab_viewer,
+                    );
                 }
                 // Only a successfully retained source may establish the
                 // gesture's modifier mode.
@@ -1548,7 +1553,8 @@ impl<Tab> DockArea<'_, Tab> {
         if let Some(rect) = self.dock_state[path].rect()
             && let Some(source) = self.group_drag_source(path)
         {
-            self.to_move_group.push((source, TabDestination::Window(rect)));
+            self.to_move_group
+                .push((source, TabDestination::Window(rect)));
         }
     }
 
@@ -1977,10 +1983,13 @@ impl<Tab> DockArea<'_, Tab> {
         };
         // Never establish a drag start for a handle which did not own the press.
         // In particular, a newly created handle must not inherit an ongoing gesture.
-        let Some(press @ GroupPress {
-            source: DragSource::Group { id, .. },
-            ..
-        }) = state.group_press else {
+        let Some(
+            press @ GroupPress {
+                source: DragSource::Group { id, .. },
+                ..
+            },
+        ) = state.group_press
+        else {
             return;
         };
         // Other handles can be visited during the same UI pass. They must not
@@ -2034,7 +2043,8 @@ impl<Tab> DockArea<'_, Tab> {
     pub(super) fn group_drag_source(&mut self, path: NodePath) -> Option<DragSource> {
         let leaf = self.dock_state.leaf_mut(path).ok()?;
         (!leaf.tabs.is_empty()).then(|| DragSource::Group {
-            path, id: leaf.ensure_drag_identity(),
+            path,
+            id: leaf.ensure_drag_identity(),
         })
     }
 
@@ -2057,7 +2067,11 @@ impl<Tab> DockArea<'_, Tab> {
             return;
         }
         if let Some(tab_id) = self.tab_identity(path, tab_viewer) {
-            state.tab_press = Some(TabPress { widget, path, tab_id });
+            state.tab_press = Some(TabPress {
+                widget,
+                path,
+                tab_id,
+            });
         }
     }
 
@@ -2107,7 +2121,10 @@ impl<Tab> DockArea<'_, Tab> {
             mem.data.insert_temp(
                 self.id.with("drag_data"),
                 Some(DragData {
-                    source: DragSource::Tab { path, id: press.tab_id },
+                    source: DragSource::Tab {
+                        path,
+                        id: press.tab_id,
+                    },
                     rect: self.dock_state[path.node_path()].rect().unwrap(),
                 }),
             );

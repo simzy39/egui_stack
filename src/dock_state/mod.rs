@@ -352,7 +352,14 @@ impl<Tab> DockState<Tab> {
             TabDestination::EmptySurface(surface) => self
                 .get_surface(surface)
                 .is_some_and(Surface::is_empty),
-            TabDestination::Window(_) => true,
+            TabDestination::Window(rect) => {
+                rect.min.x.is_finite()
+                    && rect.min.y.is_finite()
+                    && rect.max.x.is_finite()
+                    && rect.max.y.is_finite()
+                    && rect.width() > 0.0
+                    && rect.height() > 0.0
+            },
         }
     }
 
@@ -624,6 +631,9 @@ impl<Tab> DockState<Tab> {
     /// Takes a tab out of its current surface and puts it in a new window.
     /// Returns the new window's surface index, or `None` if the source tab is invalid.
     pub fn detach_tab(&mut self, src: TabPath, window_rect: Rect) -> Option<SurfaceIndex> {
+        if !self.valid_move_destination(&TabDestination::Window(window_rect)) {
+            return None;
+        }
         self.leaf(src.node_path())
             .ok()?
             .tabs
@@ -1179,6 +1189,27 @@ mod test {
         ));
         assert_eq!(dock.leaf(root).unwrap().tabs, ["first", "second"]);
         assert!(dock.get_surface(empty_surface).unwrap().is_empty());
+    }
+
+    #[test]
+    fn invalid_window_rectangles_reject_moves_without_changing_the_tree() {
+        let invalid = [
+            Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(0.0, 100.0)),
+            Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(100.0, 0.0)),
+            Rect::from_min_max(egui::pos2(f32::NAN, 0.0), egui::pos2(100.0, 100.0)),
+            Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(f32::INFINITY, 100.0)),
+        ];
+        for rect in invalid {
+            let mut dock = DockState::new(vec!["first", "second"]);
+            let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+            let tab = TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(0));
+            assert!(!dock.valid_move_destination(&TabDestination::Window(rect)));
+            assert!(!dock.move_tab(tab, TabDestination::Window(rect)));
+            assert!(!dock.move_node(root, TabDestination::Window(rect)));
+            assert_eq!(dock.detach_tab(tab, rect), None);
+            assert_eq!(dock.leaf(root).unwrap().tabs, ["first", "second"]);
+            assert_eq!(dock.surfaces.len(), 1);
+        }
     }
 
     #[test]

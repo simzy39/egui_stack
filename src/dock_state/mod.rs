@@ -194,8 +194,8 @@ impl<Tab> DockState<Tab> {
         matches!(self.surfaces.get(surface.0), Some(Surface::Window(..)))
     }
 
-    /// Capture the identity of an occupied surface, assigning one on first use.
-    /// Identities are runtime-only; reused indices receive new identities.
+    /// Capture the identity of a surface slot, including a vacant slot, assigning one on first use.
+    /// Identities are runtime-only; reused or replaced slots receive new identities.
     pub(crate) fn capture_surface_identity(&mut self, index: SurfaceIndex) -> Option<u64> {
         self.surfaces.get(index.0)?;
         if self.surface_identities.len() <= index.0 {
@@ -1248,6 +1248,23 @@ mod test {
         ));
         assert_eq!(dock.leaf(root).unwrap().tabs, ["first", "second"]);
         assert!(dock.get_surface(empty_surface).unwrap().is_empty());
+    }
+
+    #[test]
+    fn mapping_tabs_creates_a_distinct_surface_identity_namespace() {
+        let mut original = DockState::new(vec![1, 2]);
+        let extra = original.add_window(vec![3]);
+        let main = SurfaceIndex::main();
+        let old_main = original.capture_surface_identity(main).unwrap();
+        let old_extra = original.capture_surface_identity(extra).unwrap();
+
+        let mut mapped = original.map_tabs(|tab| tab.to_string());
+        assert_eq!(mapped.current_surface_identity(main), None);
+        assert_eq!(mapped.current_surface_identity(extra), None);
+        assert_ne!(mapped.capture_surface_identity(main), Some(old_main));
+        assert_ne!(mapped.capture_surface_identity(extra), Some(old_extra));
+        assert_eq!(original.current_surface_identity(main), Some(old_main));
+        assert_eq!(original.current_surface_identity(extra), Some(old_extra));
     }
 
     #[test]

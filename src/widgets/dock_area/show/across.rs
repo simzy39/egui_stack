@@ -730,19 +730,29 @@ mod tests {
     }
 
     #[test]
+    fn destination_validation_accepts_vacant_surface_and_rejects_occupied_surface() {
+        let mut dock = DockState::new(vec!["first"]);
+        let mut area = DockArea::new(&mut dock);
+        assert!(!area.destination_valid(&TabDestination::EmptySurface(SurfaceIndex::main())));
+        assert!(!area.destination_valid(&TabDestination::EmptySurface(SurfaceIndex(999))));
+    }
+
+    #[test]
     fn remote_release_rejects_destination_insert_index_stale_after_tab_removal() {
         let mut dock = DockState::new(vec!["source"]);
         dock.main_surface_mut()
             .split_right(NodeIndex::root(), 0.5, vec!["first", "second"]);
         let source_path = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
         let target_path = NodePath::new(SurfaceIndex::main(), NodeIndex(2));
-        let source = DragSource::Tab {
-            path: TabPath::new(SurfaceIndex::main(), NodeIndex(1), TabIndex(0)),
-            id: Id::unique("source"),
-        };
         let rect = Rect::from_min_size(Pos2::ZERO, egui::vec2(200.0, 100.0));
         let mut viewer = Viewer { allow_windows: true };
         let mut area = DockArea::new(&mut dock);
+        let source_path_tab = TabPath::new(SurfaceIndex::main(), NodeIndex(1), TabIndex(0));
+        let source = DragSource::Tab {
+            path: source_path_tab,
+            id: area.tab_identity(source_path_tab, &mut viewer).unwrap(),
+        };
+        assert!(area.drag_source_valid(source, &mut viewer));
 
         // The preview allowed insertion at index two, but a tab was removed
         // before the receiving viewport processed the release.

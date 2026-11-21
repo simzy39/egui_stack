@@ -339,16 +339,18 @@ impl<Tab> DockArea<'_, Tab> {
                     TabDestination::Window(_) => None,
                 }
                 .map(str::to_owned);
-                if let Some(space) = &mut self.space {
-                    space.drop_zone = dock.zip(report.unfold.clone());
-                }
+                // A stale report or a fresh veto must not change the dock's drop zone.
                 if self
                     .refusal_of(&src, tab_viewer, &destination, true)
                     .is_none()
                     && self.apply_move(source, destination, tab_viewer)
-                    && let (Some(zone), Some(space)) = (report.unfold, &mut self.space)
                 {
-                    space.no_drop.unfolds.push(zone);
+                    if let Some(space) = &mut self.space {
+                        space.drop_zone = dock.zip(report.unfold.clone());
+                        if let Some(zone) = report.unfold {
+                            space.no_drop.unfolds.push(zone);
+                        }
+                    }
                 }
             }
             Outcome::Refused => {}

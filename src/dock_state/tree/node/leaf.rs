@@ -1,10 +1,13 @@
-use std::{ops, sync::atomic::{AtomicU64, Ordering}};
-
-static NEXT_LEAF_DRAG_ID: AtomicU64 = AtomicU64::new(1);
+use std::{
+    ops,
+    sync::atomic::{AtomicU64, Ordering},
+};
 
 use egui::Rect;
 
 use crate::{Error, Result, TabIndex};
+
+static NEXT_LEAF_DRAG_ID: AtomicU64 = AtomicU64::new(1);
 
 /// The inner data of a [``Node::Leaf``](crate::Node), which contains tabs and can be collapsed.
 #[derive(Debug)]
@@ -42,9 +45,16 @@ pub struct LeafNode<Tab> {
 
 impl<Tab: Clone> Clone for LeafNode<Tab> {
     fn clone(&self) -> Self {
-        Self { rect: self.rect, viewport: self.viewport, tabs: self.tabs.clone(),
-            active: self.active, scroll: self.scroll, collapsed: self.collapsed,
-            tab_bar_hidden: self.tab_bar_hidden, drag_identity: 0 }
+        Self {
+            rect: self.rect,
+            viewport: self.viewport,
+            tabs: self.tabs.clone(),
+            active: self.active,
+            scroll: self.scroll,
+            collapsed: self.collapsed,
+            tab_bar_hidden: self.tab_bar_hidden,
+            drag_identity: 0,
+        }
     }
 }
 

@@ -5,7 +5,7 @@ mod show;
 
 // Various components of the `DockArea` which is used when rendering
 mod allowed_splits;
-mod drag_and_drop;
+pub(crate) mod drag_and_drop;
 mod drop_zone;
 mod group_handles;
 mod labels;

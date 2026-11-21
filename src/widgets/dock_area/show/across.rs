@@ -948,6 +948,51 @@ mod tests {
     }
 
     #[test]
+    fn remote_release_cannot_target_a_replacement_leaf_at_the_same_path() {
+        let mut dock = DockState::new(vec!["source"]);
+        dock.main_surface_mut()
+            .split_right(NodeIndex::root(), 0.5, vec!["original target"]);
+        let source_path = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
+        let target_path = NodePath::new(SurfaceIndex::main(), NodeIndex(2));
+        let rect = Rect::from_min_size(Pos2::ZERO, egui::vec2(200.0, 100.0));
+        let mut viewer = Viewer { allow_windows: true };
+        let mut area = DockArea::new(&mut dock);
+        let source = area.group_drag_source(source_path).unwrap();
+        let target_identity = area
+            .dock_state
+            .leaf_mut(target_path)
+            .unwrap()
+            .ensure_drag_identity();
+
+        // Replacing the leaf preserves its positional path, but must not inherit
+        // the identity captured by the other viewport's drop report.
+        let replacement = area.dock_state.leaf(target_path).unwrap().clone();
+        *area.dock_state.leaf_mut(target_path).unwrap() = replacement;
+
+        area.release_over(
+            Report {
+                stamp: 0,
+                rank: 0,
+                outcome: Outcome::Drop(TabDestination::Node(
+                    target_path,
+                    TabInsert::Append,
+                )),
+                destination_identity: Some(target_identity),
+                unfold: None,
+            },
+            source,
+            rect,
+            &mut viewer,
+        );
+
+        assert_eq!(area.dock_state.leaf(source_path).unwrap().tabs, ["source"]);
+        assert_eq!(
+            area.dock_state.leaf(target_path).unwrap().tabs,
+            ["original target"],
+        );
+    }
+
+    #[test]
     fn group_drag_moves_current_leaf_contents_after_membership_changes() {
         let mut dock = DockState::new(vec!["original", "removed"]);
         dock.main_surface_mut()

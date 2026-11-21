@@ -15,6 +15,12 @@ use crate::{
     DockArea, Surface, TabDestination, TabIndex, TabInsert, TabPath, TabViewer, WindowOutlinePaint,
 };
 
+/// Origin changes staged before mutation and applied only after a successful move.
+struct PendingOriginUpdate {
+    entering_float: bool,
+    tabs: Vec<TabOrigin>,
+}
+
 /// What an area does with its space's drag this pass.
 pub(super) enum Across {
     /// The drag is this viewport's, or there is none: resolved as in one viewport.
@@ -546,7 +552,7 @@ impl<Tab> DockArea<'_, Tab> {
         src: &TreeComponent,
         to: crate::SurfaceIndex,
         tab_viewer: &mut impl TabViewer<Tab = Tab>,
-    ) -> Option<(bool, Vec<TabOrigin>)> {
+    ) -> Option<PendingOriginUpdate> {
         let space = self.space.as_ref()?;
         if !space.floating.enabled {
             return None;
@@ -590,15 +596,18 @@ impl<Tab> DockArea<'_, Tab> {
                 after,
             ));
         }
-        Some((to_float, updates))
+        Some(PendingOriginUpdate {
+            entering_float: to_float,
+            tabs: updates,
+        })
     }
 
-    fn commit_origin_update(&mut self, update: Option<(bool, Vec<TabOrigin>)>) {
-        let Some((to_float, updates)) = update else { return };
+    fn commit_origin_update(&mut self, update: Option<PendingOriginUpdate>) {
+        let Some(update) = update else { return };
         let Some(space) = self.space.as_mut() else { return };
-        for origin in updates {
+        for origin in update.tabs {
             space.origins.retain(|existing| existing.tab != origin.tab);
-            if to_float {
+            if update.entering_float {
                 space.origins.push(origin);
             }
         }

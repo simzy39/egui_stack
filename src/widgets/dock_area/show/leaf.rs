@@ -2342,6 +2342,14 @@ impl<Tab> DockArea<'_, Tab> {
             .leaf_mut(path)
             .expect("This node must be a leaf");
         let tab_bar_shown = !(self.hidable_tab_bars && leaf.tab_bar_hidden);
+        let body_drag_source = if self.draggable_tabs && !collapsed && !leaf.tabs.is_empty() {
+            Some(DragSource::Group {
+                path,
+                id: leaf.ensure_drag_identity(),
+            })
+        } else {
+            None
+        };
         let LeafNode {
             rect,
             viewport,
@@ -2448,11 +2456,7 @@ impl<Tab> DockArea<'_, Tab> {
                         }
                         let available_rect = ui.available_rect_before_wrap();
                         ui.expand_to_include_rect(available_rect);
-                        let source = if self.draggable_tabs {
-                            self.group_drag_source(path)
-                        } else {
-                            None
-                        };
+                        let source = body_drag_source;
                         let outer = ui.data_mut(|d| {
                             let body = BodyLeaf {
                                 dock_area: self.id,

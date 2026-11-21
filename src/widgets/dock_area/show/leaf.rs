@@ -1987,7 +1987,10 @@ impl<Tab> DockArea<'_, Tab> {
         if press.widget != widget {
             return;
         }
-        if press.path != path || self.tab_identity(path, tab_viewer) != Some(press.tab_id) {
+        if !self
+            .tab_identity(path, tab_viewer)
+            .is_some_and(|id| press.matches(widget, path, id))
+        {
             self.cancel_tab_drag(ui, state);
             return;
         }

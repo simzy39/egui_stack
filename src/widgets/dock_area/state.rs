@@ -13,6 +13,13 @@ pub(super) struct TabPress {
     pub tab_id: Id,
 }
 
+impl TabPress {
+    /// The initiating widget and logical tab must still match the retained press.
+    pub(super) fn matches(self, widget: Id, path: TabPath, tab_id: Id) -> bool {
+        self.widget == widget && self.path == path && self.tab_id == tab_id
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct GroupPress {
     pub widget: Id,
@@ -133,6 +140,20 @@ impl State {
 #[cfg(test)]
 mod retained_source_tests {
     use super::*;
+
+    #[test]
+    fn tab_press_requires_original_widget_path_and_identity() {
+        use crate::{NodeIndex, SurfaceIndex, TabIndex};
+        let path = TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(0));
+        let other = TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(1));
+        let widget = Id::new("original_tab_widget");
+        let id = Id::new("original_tab");
+        let press = TabPress { widget, path, tab_id: id };
+        assert!(press.matches(widget, path, id));
+        assert!(!press.matches(Id::new("other_widget"), path, id));
+        assert!(!press.matches(widget, other, id));
+        assert!(!press.matches(widget, path, Id::new("replacement_tab")));
+    }
 
     #[test]
     fn group_press_retains_widget_and_source() {

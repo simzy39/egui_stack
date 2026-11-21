@@ -30,8 +30,7 @@ pub(super) struct State {
     pub dragged: Option<DraggedTab>,
     /// The tab group (a leaf, all its tabs) dragged during the last frame, if any.
     pub dragged_node: Option<DraggedNode>,
-    /// Whether the tab being dragged carries its whole group: decided when its drag starts, by
-    /// the group drag modifiers held then.
+    /// Whether the tab gesture carries its whole group: locked at pointer-down.
     pub drag_carries_group: Option<bool>,
     /// The pass the drag was last resolved in: the docks of a space resolve it once a pass.
     pub pass: Option<u64>,
@@ -74,6 +73,13 @@ impl State {
     #[inline(always)]
     pub(super) fn store(self, ctx: &Context, id: Id) {
         ctx.data_mut(|d| d.insert_temp(id, self));
+    }
+
+    /// Clear a completed or interrupted gesture, including its retained source.
+    pub(super) fn finish_drag(&mut self) {
+        self.reset_drag();
+        self.tab_press = None;
+        self.group_press = None;
     }
 
     pub(super) fn reset_drag(&mut self) {

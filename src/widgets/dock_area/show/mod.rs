@@ -256,9 +256,7 @@ impl<Tab> DockArea<'_, Tab> {
             {
                 space.floating.session = None;
             }
-            state.reset_drag();
-            state.tab_press = None;
-            state.group_press = None;
+            state.finish_drag();
             self.forget_no_drop();
             self.forget_verdicts();
             ui.ctx().request_repaint();
@@ -311,9 +309,7 @@ impl<Tab> DockArea<'_, Tab> {
                 state.drag_lost = Some(id);
                 ui.ctx().stop_dragging();
             }
-            state.reset_drag();
-            state.tab_press = None;
-            state.group_press = None;
+            state.finish_drag();
             state.tab_in_air = None;
             self.forget_verdicts();
         }
@@ -356,9 +352,7 @@ impl<Tab> DockArea<'_, Tab> {
             .is_some_and(|drag| !self.drag_source_valid(drag.source, tab_viewer))
         {
             drag_data = None;
-            state.reset_drag();
-            state.tab_press = None;
-            state.group_press = None;
+            state.finish_drag();
             state.tab_in_air = None;
         }
         let hover_data = if drag_data.is_some() {
@@ -500,9 +494,7 @@ impl<Tab> DockArea<'_, Tab> {
         }
 
         if released {
-            state.reset_drag();
-            state.tab_press = None;
-            state.group_press = None;
+            state.finish_drag();
             #[cfg(feature = "bus")]
             if let Some(bus) = self.space.as_ref().and_then(|space| space.bus) {
                 bus.forget_verdicts();
@@ -514,9 +506,7 @@ impl<Tab> DockArea<'_, Tab> {
     /// for the rest of this press, so the next occupant of its slot cannot restart the drag.
     fn cancel_tab_drag(&self, ui: &Ui, state: &mut State) {
         state.tab_drag_cancelled = true;
-        state.tab_press = None;
-        state.group_press = None;
-        state.reset_drag();
+        state.finish_drag();
         state.dragged = None;
         state.dragged_node = None;
         state.tab_in_air = None;

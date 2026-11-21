@@ -1510,6 +1510,28 @@ mod detach_tests {
     }
 
     #[test]
+    fn restore_skips_origin_with_stale_surface_registration() {
+        let mut space = DockSpace::new();
+        let original = space.add_dock("original", DockRules::default(), vec!["first"]);
+        space.add_dock("fallback", DockRules::default(), vec!["existing"]);
+        let (tab, place) = space.take_with_place(Id::new("first"), id).unwrap();
+        space.state.take_surface(original).unwrap();
+        assert_eq!(space.dock_surface("original"), Some(original));
+        assert_eq!(space.restore_at(tab, place, id).unwrap(), "fallback");
+        assert!(space.dock("fallback").unwrap().find_tab(&"first").is_some());
+    }
+
+    #[test]
+    fn restore_without_usable_dock_returns_original_tab() {
+        let mut space = DockSpace::new();
+        let original = space.add_dock("original", DockRules::default(), vec!["first"]);
+        let (tab, place) = space.take_with_place(Id::new("first"), id).unwrap();
+        space.state.take_surface(original).unwrap();
+        assert_eq!(space.restore_at(tab, place, id).unwrap_err(), "first");
+        assert_eq!(space.dock_surface("original"), Some(original));
+    }
+
+    #[test]
     fn restore_uses_surviving_neighbour_before_stale_index() {
         let mut space = DockSpace::new();
         space.add_dock("editor", DockRules::default(), vec!["first", "middle", "last"]);

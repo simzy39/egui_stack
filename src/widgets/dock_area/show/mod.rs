@@ -260,6 +260,7 @@ impl<Tab> DockArea<'_, Tab> {
             }
             state.reset_drag();
             state.tab_press = None;
+            state.group_press = None;
             self.forget_no_drop();
             self.forget_verdicts();
             ui.ctx().request_repaint();
@@ -499,6 +500,7 @@ impl<Tab> DockArea<'_, Tab> {
         if released {
             state.reset_drag();
             state.tab_press = None;
+            state.group_press = None;
             #[cfg(feature = "bus")]
             if let Some(bus) = self.space.as_ref().and_then(|space| space.bus) {
                 bus.forget_verdicts();
@@ -543,6 +545,7 @@ impl<Tab> DockArea<'_, Tab> {
             }
             state.drag_lost = None;
             state.tab_press = None;
+            state.group_press = None;
         }
         let Some(dragged) = ctx.dragged_id() else {
             return false;

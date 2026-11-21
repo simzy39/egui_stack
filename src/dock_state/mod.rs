@@ -1241,6 +1241,23 @@ mod test {
     }
 
     #[test]
+    fn recycled_surface_slot_gets_a_new_runtime_identity() {
+        let mut dock = DockState::new(vec!["main"]);
+        let first = dock.add_window(vec!["first"]);
+        let original = dock.capture_surface_identity(first).unwrap();
+        assert_eq!(dock.current_surface_identity(first), Some(original));
+
+        assert!(dock.remove_surface(first).is_some());
+        assert_eq!(dock.current_surface_identity(first), None);
+        let recycled = dock.add_window(vec!["second"]);
+        assert_eq!(first, recycled);
+        assert_eq!(dock.current_surface_identity(recycled), None);
+        let replacement = dock.capture_surface_identity(recycled).unwrap();
+        assert_ne!(original, replacement);
+        assert_eq!(dock.current_surface_identity(recycled), Some(replacement));
+    }
+
+    #[test]
     fn removing_surface_rejects_main_vacant_and_out_of_range_slots() {
         let mut dock = DockState::new(vec!["main"]);
         let first = dock.add_window(vec!["first"]);

@@ -826,6 +826,47 @@ mod tests {
     }
 
     #[test]
+    fn group_move_to_float_records_origins_only_after_success() {
+        let mut space = DockSpace::new();
+        space.add_dock("main", DockRules::default(), vec!["first", "second"]);
+        space.add_dock("other", DockRules::default(), vec!["target"]);
+        let main = space.dock_surface("main").unwrap();
+        let other = space.dock_surface("other").unwrap();
+        let rect = Rect::from_min_size(Pos2::ZERO, egui::vec2(300.0, 200.0));
+        let key = space.float_out(
+            TabPath::new(other, NodeIndex::root(), TabIndex(0)),
+            rect,
+            |tab| Id::unique(*tab),
+        ).unwrap();
+        let target = space.dock_surface(&key).unwrap();
+        let source_path = NodePath::new(main, NodeIndex::root());
+        let mut viewer = Viewer { allow_windows: true };
+        {
+            let mut area = DockArea::dock(&mut space, "main");
+            let source = area.group_drag_source(source_path).unwrap();
+            assert!(!area.apply_move(
+                source,
+                TabDestination::Node(NodePath::new(target, NodeIndex(999)), TabInsert::Append),
+                &mut viewer,
+            ));
+        }
+        assert!(space.origin(Id::unique("first")).is_none());
+        assert!(space.origin(Id::unique("second")).is_none());
+        {
+            let mut area = DockArea::dock(&mut space, "main");
+            let source = area.group_drag_source(source_path).unwrap();
+            assert!(area.apply_move(
+                source,
+                TabDestination::Node(NodePath::new(target, NodeIndex::root()), TabInsert::Append),
+                &mut viewer,
+            ));
+        }
+        for tab in ["first", "second"] {
+            assert_eq!(space.origin(Id::unique(tab)).unwrap().dock, "main");
+        }
+    }
+
+    #[test]
     fn destination_validation_accepts_vacant_surface_and_rejects_occupied_surface() {
         let mut dock = DockState::new(vec!["first"]);
         let mut area = DockArea::new(&mut dock);

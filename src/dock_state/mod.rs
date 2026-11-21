@@ -364,8 +364,7 @@ impl<Tab> DockState<Tab> {
             TabDestination::Node(path, _) => self.leaf(path).is_ok(),
             TabDestination::EmptySurface(surface) => self
                 .get_surface(surface)
-                .and_then(Surface::node_tree)
-                .is_some_and(|tree| tree.is_empty()),
+                .is_some_and(Surface::is_empty),
             TabDestination::Window(_) => true,
         };
         if !destination_valid {
@@ -451,8 +450,7 @@ impl<Tab> DockState<Tab> {
             TabDestination::Node(path, _) => self.leaf(path).is_ok(),
             TabDestination::EmptySurface(surface) => self
                 .get_surface(surface)
-                .and_then(Surface::node_tree)
-                .is_some_and(|tree| tree.is_empty()),
+                .is_some_and(Surface::is_empty),
             TabDestination::Window(_) => true,
         };
         if !destination_valid {
@@ -1054,6 +1052,16 @@ mod test {
             root,
             TabDestination::Node(root, TabInsert::Append),
         ));
+        assert_eq!(dock.leaf(root).unwrap().tabs, ["first", "second"]);
+    }
+
+    #[test]
+    fn empty_surface_move_rejects_an_occupied_surface() {
+        let mut dock = DockState::new(vec!["first", "second"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let tab = TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(0));
+        assert!(!dock.move_node(root, TabDestination::EmptySurface(SurfaceIndex::main())));
+        assert!(!dock.move_tab(tab, TabDestination::EmptySurface(SurfaceIndex::main())));
         assert_eq!(dock.leaf(root).unwrap().tabs, ["first", "second"]);
     }
 

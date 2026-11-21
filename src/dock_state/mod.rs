@@ -479,7 +479,7 @@ impl<Tab> DockState<Tab> {
         if self.leaf(src.node_path()).is_err_or(|leaf| src.tab.0 >= leaf.tabs.len()) {
             return false;
         }
-        if !self.valid_move_destination(&destination) {
+        if !self.valid_move_destination(&destination) || self.tab_move_is_noop(src, &destination) {
             return false;
         }
         match destination {
@@ -488,10 +488,6 @@ impl<Tab> DockState<Tab> {
                 return true;
             }
             TabDestination::Node(dst, dst_tab) => {
-                if self.tab_move_is_noop(src, &destination) {
-                    return false;
-                }
-
                 // Call `Node::remove_tab` to avoid auto remove of the node by `Tree::remove_tab` from Tree.
                 let tab = self[src.node_path()].remove_tab(src.tab).unwrap();
                 match dst_tab {

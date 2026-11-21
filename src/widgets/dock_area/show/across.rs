@@ -9,7 +9,7 @@ use super::super::{
     state::State,
     PendingFloat,
 };
-use crate::dock_space::record_origin;
+use crate::dock_space::{TabOrigin, dock_name};
 use crate::layout::ZoneName;
 use crate::{
     DockArea, Surface, TabDestination, TabIndex, TabInsert, TabPath, TabViewer, WindowOutlinePaint,
@@ -504,9 +504,9 @@ impl<Tab> DockArea<'_, Tab> {
             TabDestination::EmptySurface(surface) => Some(surface),
             TabDestination::Window(_) => None,
         };
-        if let Some(to) = to {
-            self.track_origins(&src, to, tab_viewer);
-        }
+        let origin_update = to.and_then(|surface| {
+            self.prepare_origin_update(&src, surface, tab_viewer)
+        });
         match src {
             TreeComponent::Node(path) => {
                 if !self.dock_state.move_node(path, destination) {
@@ -529,6 +529,7 @@ impl<Tab> DockArea<'_, Tab> {
             }
             TreeComponent::Surface(_) => unreachable!("drag sources cannot be surfaces"),
         }
+        self.commit_origin_update(origin_update);
         // Notify observers only after DockState confirms that the move occurred.
         #[cfg(feature = "bus")]
         self.emit_moved(&destination);
@@ -538,55 +539,67 @@ impl<Tab> DockArea<'_, Tab> {
     /// The origins of the tabs of `src` moving to the surface `to`: recorded when they leave a
     /// dock for a float's, forgotten when they land in a dock no float shows, kept from float
     /// to float.
-    fn track_origins(
+    /// Capture source identities and neighbours before moving, without changing origins.
+    /// The returned update is committed only if the dock mutation succeeds.
+    fn prepare_origin_update(
         &mut self,
         src: &TreeComponent,
         to: crate::SurfaceIndex,
         tab_viewer: &mut impl TabViewer<Tab = Tab>,
-    ) {
-        let Some(space) = self.space.as_mut() else {
-            return;
-        };
+    ) -> Option<(bool, Vec<TabOrigin>)> {
+        let space = self.space.as_ref()?;
         if !space.floating.enabled {
-            return;
+            return None;
         }
         let from = src.surface_address();
         let is_float = |surface| {
-            space
-                .docks
-                .iter()
-                .any(|dock| dock.surface == surface && dock.floating)
+            space.docks.iter().any(|dock| dock.surface == surface && dock.floating)
         };
         let from_float = is_float(from) || self.dock_state.is_window(from);
         let to_float = is_float(to);
         if from_float == to_float {
-            return;
+            return None;
         }
+        let dock = if to_float {
+            Some(dock_name(space.docks, from)?.to_owned())
+        } else {
+            None
+        };
         let paths: Vec<TabPath> = match *src {
             TreeComponent::Tab(path) => vec![path],
             TreeComponent::Node(path) => (0..self.dock_state[path].tabs_count())
                 .map(|i| TabPath::new(path.surface, path.node, TabIndex(i)))
                 .collect(),
-            TreeComponent::Surface(_) => return,
+            TreeComponent::Surface(_) => return None,
         };
-        if to_float {
-            for path in paths {
-                record_origin(
-                    self.dock_state,
-                    space.docks,
-                    space.origins,
-                    path,
-                    &mut |tab| tab_viewer.id(tab),
-                );
+        let mut updates = Vec::with_capacity(paths.len());
+        for path in paths {
+            let leaf = self.dock_state.leaf_mut(path.node_path()).ok()?;
+            let at = path.tab.0;
+            let tabs = leaf.tabs_mut();
+            if at >= tabs.len() {
+                return None;
             }
-        } else {
-            for path in paths {
-                if let Ok(leaf) = self.dock_state.leaf_mut(path.node_path())
-                    && let Some(tab) = leaf.tabs.get_mut(path.tab.0)
-                {
-                    let id = tab_viewer.id(tab);
-                    space.origins.retain(|origin| origin.tab != id);
-                }
+            let tab = tab_viewer.id(&mut tabs[at]);
+            let before = at.checked_sub(1).map(|i| tab_viewer.id(&mut tabs[i]));
+            let after = tabs.get_mut(at + 1).map(|next| tab_viewer.id(next));
+            updates.push(TabOrigin::new(
+                tab,
+                dock.as_deref().unwrap_or_default(),
+                before,
+                after,
+            ));
+        }
+        Some((to_float, updates))
+    }
+
+    fn commit_origin_update(&mut self, update: Option<(bool, Vec<TabOrigin>)>) {
+        let Some((to_float, updates)) = update else { return };
+        let Some(space) = self.space.as_mut() else { return };
+        for origin in updates {
+            space.origins.retain(|existing| existing.tab != origin.tab);
+            if to_float {
+                space.origins.push(origin);
             }
         }
     }

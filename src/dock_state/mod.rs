@@ -1069,12 +1069,19 @@ mod test {
     fn splitting_an_empty_node_is_rejected_without_removing_source() {
         let mut dock = DockState::new(vec!["first", "second"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
-        let missing = NodePath::new(SurfaceIndex::main(), NodeIndex(999));
+        let empty_surface = dock.add_window(vec![]);
+        let empty = NodePath::new(empty_surface, NodeIndex::root());
+        let source = TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(0));
         assert!(!dock.move_tab(
-            TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(0)),
-            TabDestination::Node(missing, TabInsert::Split(crate::Split::Right)),
+            source,
+            TabDestination::Node(empty, TabInsert::Split(crate::Split::Right)),
+        ));
+        assert!(!dock.move_node(
+            root,
+            TabDestination::Node(empty, TabInsert::Split(crate::Split::Right)),
         ));
         assert_eq!(dock.leaf(root).unwrap().tabs, ["first", "second"]);
+        assert!(dock.get_surface(empty_surface).unwrap().is_empty());
     }
 
     #[test]

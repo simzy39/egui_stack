@@ -235,6 +235,7 @@ struct BodyLeaf {
 
 impl BodyLeaf {
     /// Consume the temporary request without requiring egui::Id: Default.
+    #[cfg(test)]
     fn take_request(
         data: &mut egui::util::IdTypeMap,
         key: Id,

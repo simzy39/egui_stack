@@ -1621,7 +1621,7 @@ mod tests {
             area.group_drag_source(root).unwrap()
         };
         let pointer = pos2(50.0, 40.0);
-        let mut frame = |events: Vec<Event>| {
+        let frame = |events: Vec<Event>| {
             let input = RawInput {
                 events,
                 ..Default::default()
@@ -1750,7 +1750,7 @@ mod tests {
                 ..Default::default()
             };
             ctx.begin_pass(input);
-            egui::CentralPanel::default().show(&ctx, |ui| {
+            egui::CentralPanel::default().show(ctx, |ui| {
                     DockArea::new(dock)
                         .id(area_id)
                         .show_inside(ui, &mut viewer);

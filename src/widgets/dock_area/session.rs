@@ -77,9 +77,9 @@ pub(crate) struct Report {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum DestinationIdentity {
     Leaf(u64),
-    Horizontal(Vec<DestinationIdentity>),
-    Vertical(Vec<DestinationIdentity>),
-    Grid(Vec<DestinationIdentity>),
+    Horizontal(u64),
+    Vertical(u64),
+    Grid(u64),
 }
 
 /// What a release over a viewport does.

@@ -459,66 +459,49 @@ impl<Tab> DockArea<'_, Tab> {
         }
     }
 
-    /// Capture the identity of a destination node and its complete descendant structure.
-    ///
-    /// Leaf identities survive ordinary tab edits and node relocation, but are reset
-    /// when a leaf is replaced or a tree is cloned. Container identities are represented
-    /// by their kind and ordered descendant identities, so structural replacement is
-    /// rejected even when the container's positional node index is reused.
-    fn capture_destination_identity(&mut self, path: crate::NodePath) -> Option<DestinationIdentity> {
-        let (kind, children) = {
-            let node = self.dock_state.node_mut(path).ok()?;
-            if let Some(leaf) = node.get_leaf_mut() {
-                return Some(DestinationIdentity::Leaf(leaf.ensure_drag_identity()));
-            }
-            let kind = if node.is_grid() {
-                2
-            } else if node.is_horizontal() {
-                0
-            } else if node.is_vertical() {
-                1
+    /// Capture a node's stable runtime identity when a destination is reported.
+    fn capture_destination_identity(
+        &mut self,
+        path: crate::NodePath,
+    ) -> Option<DestinationIdentity> {
+        let node = self.dock_state.node_mut(path).ok()?;
+        if let Some(leaf) = node.get_leaf_mut() {
+            return Some(DestinationIdentity::Leaf(leaf.ensure_drag_identity()));
+        }
+        if let Some(linear) = node.get_linear_mut() {
+            return Some(if linear.dir == crate::LinearDir::Horizontal {
+                DestinationIdentity::Horizontal(linear.ensure_drag_identity())
             } else {
-                return None;
-            };
-            (kind, node.children().to_vec())
-        };
-        let children = children
-            .into_iter()
-            .map(|child| self.capture_destination_identity(crate::NodePath::new(path.surface, child)))
-            .collect::<Option<Vec<_>>>()?;
-        Some(match kind {
-            0 => DestinationIdentity::Horizontal(children),
-            1 => DestinationIdentity::Vertical(children),
-            _ => DestinationIdentity::Grid(children),
-        })
+                DestinationIdentity::Vertical(linear.ensure_drag_identity())
+            });
+        }
+        node.get_grid_mut()
+            .map(|grid| DestinationIdentity::Grid(grid.ensure_drag_identity()))
     }
 
-    /// Rebuild the current destination identity without assigning identities to new leaves.
-    fn current_destination_identity(&self, path: crate::NodePath) -> Option<DestinationIdentity> {
+    /// Read a node's identity without assigning one to a replacement.
+    fn current_destination_identity(
+        &self,
+        path: crate::NodePath,
+    ) -> Option<DestinationIdentity> {
         let node = self.dock_state.node(path).ok()?;
         if let Some(leaf) = node.get_leaf() {
             return (leaf.drag_identity != 0)
                 .then_some(DestinationIdentity::Leaf(leaf.drag_identity));
         }
-        let kind = if node.is_grid() {
-            2
-        } else if node.is_horizontal() {
-            0
-        } else if node.is_vertical() {
-            1
-        } else {
-            return None;
-        };
-        let children = node.children().to_vec();
-        let children = children
-            .into_iter()
-            .map(|child| self.current_destination_identity(crate::NodePath::new(path.surface, child)))
-            .collect::<Option<Vec<_>>>()?;
-        Some(match kind {
-            0 => DestinationIdentity::Horizontal(children),
-            1 => DestinationIdentity::Vertical(children),
-            _ => DestinationIdentity::Grid(children),
-        })
+        if let Some(linear) = node.get_linear() {
+            if linear.drag_identity == 0 {
+                return None;
+            }
+            return Some(if linear.dir == crate::LinearDir::Horizontal {
+                DestinationIdentity::Horizontal(linear.drag_identity)
+            } else {
+                DestinationIdentity::Vertical(linear.drag_identity)
+            });
+        }
+        node.get_grid()
+            .filter(|grid| grid.drag_identity != 0)
+            .map(|grid| DestinationIdentity::Grid(grid.drag_identity))
     }
 
     /// Whether a reported destination still identifies the exact node that was hovered.
@@ -1811,7 +1794,7 @@ mod tests {
     }
 
     #[test]
-    fn reported_container_destination_rejects_changed_descendant_structure() {
+    fn reported_container_destination_rejects_replacement_at_the_same_path() {
         let mut dock = DockState::new(vec!["first"]);
         dock.main_surface_mut()
             .split_right(NodeIndex::root(), 0.5, vec!["second"]);
@@ -1824,9 +1807,11 @@ mod tests {
             Some(&identity),
         ));
 
-        area.dock_state
-            .main_surface_mut()
-            .split_right(NodeIndex::root(), 0.5, vec!["third"]);
+        let replacement = match area.dock_state.node(root).unwrap() {
+            crate::Node::Linear(linear) => linear.clone(),
+            _ => panic!("expected a linear root"),
+        };
+        *area.dock_state.node_mut(root).unwrap() = crate::Node::Linear(replacement);
 
         assert!(!area.reported_destination_identity_valid(
             &TabDestination::Node(root, TabInsert::Split(crate::Split::Below)),

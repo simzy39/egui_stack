@@ -26,7 +26,7 @@ pub enum LinearDir {
 ///
 /// The model (n-ary linear containers with shares) follows egui_tiles
 /// (<https://github.com/rerun-io/egui_tiles>, MIT OR Apache-2.0).
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 #[cfg_attr(
     feature = "serde",
     derive(serde::Deserialize, serde::Serialize),
@@ -50,6 +50,10 @@ pub struct LinearNode {
 
     /// The number of collapsed leaf subnodes.
     pub collapsed_leaf_count: i32,
+
+    /// Runtime-only identity used to validate retained drop destinations.
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub(crate) drag_identity: u64,
 }
 
 impl Default for LinearNode {
@@ -58,7 +62,28 @@ impl Default for LinearNode {
     }
 }
 
+impl Clone for LinearNode {
+    fn clone(&self) -> Self {
+        Self {
+            rect: self.rect,
+            dir: self.dir,
+            children: self.children.clone(),
+            shares: self.shares.clone(),
+            fully_collapsed: self.fully_collapsed,
+            collapsed_leaf_count: self.collapsed_leaf_count,
+            drag_identity: 0,
+        }
+    }
+}
+
 impl LinearNode {
+    pub(crate) fn ensure_drag_identity(&mut self) -> u64 {
+        if self.drag_identity == 0 {
+            self.drag_identity = super::allocate_container_drag_identity();
+        }
+        self.drag_identity
+    }
+
     /// Creates a linear node holding `children`, each with its share.
     ///
     /// # Panics
@@ -77,6 +102,7 @@ impl LinearNode {
             shares,
             fully_collapsed: false,
             collapsed_leaf_count: 0,
+            drag_identity: 0,
         }
     }
 

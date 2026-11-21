@@ -36,7 +36,7 @@ pub enum GridLayout {
 ///
 /// [`Tree`](crate::Tree) adds and removes children; [`Tree::arrange_as_grid`](crate::Tree)
 /// turns a row or a column into a grid.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 #[cfg_attr(
     feature = "serde",
     derive(serde::Deserialize, serde::Serialize),
@@ -63,6 +63,10 @@ pub struct GridNode {
 
     /// The number of collapsed leaf subnodes.
     pub collapsed_leaf_count: i32,
+
+    /// Runtime-only identity used to validate retained drop destinations.
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub(crate) drag_identity: u64,
 }
 
 impl Default for GridNode {
@@ -71,7 +75,29 @@ impl Default for GridNode {
     }
 }
 
+impl Clone for GridNode {
+    fn clone(&self) -> Self {
+        Self {
+            rect: self.rect,
+            layout: self.layout,
+            children: self.children.clone(),
+            col_shares: self.col_shares.clone(),
+            row_shares: self.row_shares.clone(),
+            fully_collapsed: self.fully_collapsed,
+            collapsed_leaf_count: self.collapsed_leaf_count,
+            drag_identity: 0,
+        }
+    }
+}
+
 impl GridNode {
+    pub(crate) fn ensure_drag_identity(&mut self) -> u64 {
+        if self.drag_identity == 0 {
+            self.drag_identity = super::allocate_container_drag_identity();
+        }
+        self.drag_identity
+    }
+
     /// Creates a grid holding `children`, row by row, with even columns and rows.
     pub fn new(layout: GridLayout, children: Vec<NodeIndex>) -> Self {
         let mut grid = Self {
@@ -82,6 +108,7 @@ impl GridNode {
             row_shares: Vec::new(),
             fully_collapsed: false,
             collapsed_leaf_count: 0,
+            drag_identity: 0,
         };
         grid.fit_shares();
         grid

@@ -224,3 +224,22 @@ mod tests {
         assert_eq!(n.shares(), &[0.375, 0.375, 0.25]);
     }
 }
+
+#[cfg(test)]
+mod drag_identity_tests {
+    use super::*;
+
+    #[test]
+    fn cloning_a_linear_node_assigns_a_fresh_runtime_identity() {
+        let mut original = LinearNode::new(
+            LinearDir::Horizontal,
+            vec![NodeIndex(1), NodeIndex(2)],
+            vec![0.5, 0.5],
+        );
+        let original_id = original.ensure_drag_identity();
+        let mut cloned = original.clone();
+
+        assert_ne!(cloned.ensure_drag_identity(), original_id);
+        assert_eq!(original.ensure_drag_identity(), original_id);
+    }
+}

@@ -311,3 +311,21 @@ mod tests {
         assert!((grid.col_fraction(0) - grid.col_fraction(1)).abs() < 1e-6);
     }
 }
+
+#[cfg(test)]
+mod drag_identity_tests {
+    use super::*;
+
+    #[test]
+    fn cloning_a_grid_node_assigns_a_fresh_runtime_identity() {
+        let mut original = GridNode::new(
+            GridLayout::Auto,
+            vec![NodeIndex(1), NodeIndex(2)],
+        );
+        let original_id = original.ensure_drag_identity();
+        let mut cloned = original.clone();
+
+        assert_ne!(cloned.ensure_drag_identity(), original_id);
+        assert_eq!(original.ensure_drag_identity(), original_id);
+    }
+}

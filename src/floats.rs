@@ -1789,6 +1789,46 @@ mod viewport_lifecycle_tests {
     }
 
     #[test]
+    fn closing_stale_report_does_not_cancel_current_drag() {
+        let source = ViewportId::from_hash_of("source");
+        let target = ViewportId::from_hash_of("old-target");
+        let mut floating = Floating::default();
+        let mut active = session(source);
+        active.pass = 10;
+        active.reports.insert(target, Report {
+            stamp: 2,
+            rank: 1,
+            outcome: Outcome::Refused,
+            unfold: None,
+        });
+        floating.session = Some(active);
+        floating.viewport_closed(target);
+        let active = floating.session.as_ref().unwrap();
+        assert!(!active.cancelled);
+        assert!(active.reports.is_empty());
+    }
+
+    #[test]
+    fn closing_report_with_maximum_stamp_does_not_overflow() {
+        let source = ViewportId::from_hash_of("source");
+        let target = ViewportId::from_hash_of("target");
+        let mut floating = Floating::default();
+        let mut active = session(source);
+        active.pass = u64::MAX;
+        active.reports.insert(target, Report {
+            stamp: u64::MAX,
+            rank: 1,
+            outcome: Outcome::Refused,
+            unfold: None,
+        });
+        floating.session = Some(active);
+        floating.viewport_closed(target);
+        let active = floating.session.as_ref().unwrap();
+        assert!(active.cancelled);
+        assert!(active.reports.is_empty());
+    }
+
+    #[test]
     fn closing_unrelated_viewport_preserves_drag() {
         let source = ViewportId::from_hash_of("source");
         let unrelated = ViewportId::from_hash_of("unrelated");

@@ -946,12 +946,14 @@ impl<Tab> DockSpace<Tab> {
             .docks
             .iter()
             .any(|dock| dock.surface == path.surface && dock.floating);
+        // Do not consume the saved origin until the tab has actually been
+        // removed. A failed removal must leave both trees and metadata intact.
+        let taken = self.state.remove_tab(path)?;
         let float_origin = if floating {
             self.take_origin(tab)
         } else {
             None
         };
-        let taken = self.state.remove_tab(path)?;
         Some((
             taken,
             TabPlace {

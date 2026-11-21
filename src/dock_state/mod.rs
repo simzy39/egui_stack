@@ -382,12 +382,21 @@ impl<Tab> DockState<Tab> {
         if matches!(dst, TabDestination::Node(d, _) if d == src) {
             return false;
         }
-        let Ok(leaf) = self.leaf_mut(src) else {
+        let Ok(leaf) = self.leaf(src) else {
             return false;
         };
         if leaf.tabs.is_empty() {
             return false;
         }
+        // Destination validity is checked before consuming source tabs.
+        // This also protects against any future destination variants whose
+        // target cannot be resolved as a mutable leaf.
+        if let TabDestination::Node(path, TabInsert::Insert(_) | TabInsert::Append) = dst {
+            if self.leaf(path).is_err() {
+                return false;
+            }
+        }
+        let leaf = self.leaf_mut(src).expect("validated source leaf");
         let active = leaf.active.0.min(leaf.tabs.len() - 1);
         let tabs = std::mem::take(&mut leaf.tabs);
         match dst {
@@ -414,13 +423,7 @@ impl<Tab> DockState<Tab> {
                     self[d.surface].split(d.node, split, 0.5, node);
                 }
                 TabInsert::Insert(_) | TabInsert::Append => {
-                    let Ok(leaf) = self.leaf_mut(d) else {
-                        // Not a leaf: put the tabs back.
-                        if let Ok(leaf) = self.leaf_mut(src) {
-                            leaf.tabs = tabs;
-                        }
-                        return false;
-                    };
+                    let leaf = self.leaf_mut(d).expect("validated destination leaf");
                     let at = match insert {
                         TabInsert::Insert(i) => i.0.min(leaf.tabs.len()),
                         _ => leaf.tabs.len(),

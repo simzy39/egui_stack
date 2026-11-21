@@ -804,6 +804,28 @@ mod tests {
     }
 
     #[test]
+    fn movement_rechecks_group_identity_before_mutating_the_tree() {
+        let mut dock = DockState::new(vec!["original"]);
+        dock.main_surface_mut()
+            .split_right(NodeIndex::root(), 0.5, vec!["target"]);
+        let left = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
+        let right = NodePath::new(SurfaceIndex::main(), NodeIndex(2));
+        let mut viewer = Viewer { allow_windows: true };
+        let mut area = DockArea::new(&mut dock);
+        let id = area.dock_state.leaf_mut(left).unwrap().ensure_drag_identity();
+        let source = DragSource::Group { path: left, id };
+        let replacement = area.dock_state.leaf(left).unwrap().clone();
+        *area.dock_state.leaf_mut(left).unwrap() = replacement;
+        assert!(!area.apply_move(
+            source,
+            TabDestination::Node(right, TabInsert::Append),
+            &mut viewer,
+        ));
+        assert_eq!(area.dock_state.leaf(left).unwrap().tabs, ["original"]);
+        assert_eq!(area.dock_state.leaf(right).unwrap().tabs, ["target"]);
+    }
+
+    #[test]
     fn movement_rejects_an_invalid_destination_without_mutation() {
         let mut dock = DockState::new(vec!["first"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());

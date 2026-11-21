@@ -1884,7 +1884,7 @@ impl<Tab> DockArea<'_, Tab> {
     }
 
     /// Assign runtime identity when a group source is retained.
-    fn group_drag_source(&mut self, path: NodePath) -> Option<DragSource> {
+    pub(super) fn group_drag_source(&mut self, path: NodePath) -> Option<DragSource> {
         let leaf = self.dock_state.leaf_mut(path).ok()?;
         (!leaf.tabs.is_empty()).then(|| DragSource::Group {
             path, id: leaf.ensure_drag_identity(),

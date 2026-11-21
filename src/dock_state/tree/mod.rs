@@ -1080,7 +1080,7 @@ impl<Tab> Tree<Tab> {
     ///
     /// Returns the removed tab if it exists, or `None` otherwise.
     pub fn remove_tab(&mut self, (node_index, tab_index): (NodeIndex, TabIndex)) -> Option<Tab> {
-        let node = &mut self[node_index];
+        let node = self.nodes.get_mut(node_index.0)?;
         let tab = node.remove_tab(tab_index)?;
         if node.tabs_count() == 0 {
             self.remove_leaf(node_index);

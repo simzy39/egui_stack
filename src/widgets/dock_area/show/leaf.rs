@@ -876,11 +876,15 @@ impl<Tab> DockArea<'_, Tab> {
                 // The initiating widget owns both the source and modifier mode.
                 // A competing widget must not latch the drag mode.
                 let carries_group = self.modifiers_carry_group(tabs_ui);
-                state.drag_carries_group = Some(carries_group);
                 if carries_group {
                     self.remember_group_press(tabs_ui, state, id, path);
                 } else {
                     self.remember_tab_press(tabs_ui, state, id, (path, tab_index).into(), tab_viewer);
+                }
+                // Only a successfully retained source may establish the
+                // gesture's modifier mode.
+                if state.group_press.is_some() || state.tab_press.is_some() {
+                    state.drag_carries_group = Some(carries_group);
                 }
             }
 

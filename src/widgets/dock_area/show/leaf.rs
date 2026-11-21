@@ -199,9 +199,9 @@ impl<Tab> DockArea<'_, Tab> {
             && !state.tab_drag_cancelled
             && state.drag_lost.is_none()
         {
-            // Body handles report one frame after their initial press.
-            // Keep the identity captured in that frame, never the leaf now
-            // occupying the same path.
+            // The handle reports during tab-body rendering; consume its
+            // retained identity after that body is shown. Never recapture
+            // whichever leaf now occupies the path.
             if self.drag_source_valid(source, tab_viewer) {
                 state.group_press = Some(GroupPress {
                     widget: handle_id,

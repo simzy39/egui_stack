@@ -198,7 +198,7 @@ impl DockArea<'_, ()> {
         else {
             return false;
         };
-        if !body.draggable {
+        if body.source.is_none() {
             return false;
         }
         if response.is_pointer_button_down_on() && ui.input(|i| i.pointer.primary_pressed()) {
@@ -229,7 +229,6 @@ impl DockArea<'_, ()> {
 struct BodyLeaf {
     dock_area: Id,
     path: NodePath,
-    draggable: bool,
     source: Option<DragSource>,
 }
 

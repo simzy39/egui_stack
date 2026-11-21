@@ -1044,6 +1044,45 @@ mod test {
     use super::*;
 
     #[test]
+    fn splitting_another_leaf_keeps_source_cleanup_and_destination_intact() {
+        let mut dock = DockState::new(vec!["source"]);
+        let [left, right] = dock.main_surface_mut().split_right(
+            NodeIndex::root(), 0.5, vec!["destination"],
+        );
+        let source = TabPath::new(SurfaceIndex::main(), left, TabIndex(0));
+        let destination = NodePath::new(SurfaceIndex::main(), right);
+        assert!(dock.move_tab(
+            source,
+            TabDestination::Node(destination, TabInsert::Split(crate::Split::Below)),
+        ));
+        assert!(dock.find_tab(&"source").is_some());
+        assert!(dock.find_tab(&"destination").is_some());
+        assert_eq!(dock.leaf(destination).unwrap().tabs, ["destination"]);
+    }
+
+    #[test]
+    fn splitting_group_into_another_leaf_preserves_all_tabs_and_active_selection() {
+        let mut dock = DockState::new(vec!["first", "second"]);
+        let [left, right] = dock.main_surface_mut().split_right(
+            NodeIndex::root(), 0.5, vec!["destination"],
+        );
+        let source = NodePath::new(SurfaceIndex::main(), left);
+        let destination = NodePath::new(SurfaceIndex::main(), right);
+        dock.leaf_mut(source).unwrap().active = TabIndex(1);
+        assert!(dock.move_node(
+            source,
+            TabDestination::Node(destination, TabInsert::Split(crate::Split::Below)),
+        ));
+        for name in ["first", "second", "destination"] {
+            assert!(dock.find_tab(&name).is_some(), "lost tab: {name}");
+        }
+        let moved = dock.find_tab(&"second").unwrap().node_path();
+        let leaf = dock.leaf(moved).unwrap();
+        assert_eq!(leaf.tabs, ["first", "second"]);
+        assert_eq!(leaf.active, TabIndex(1));
+    }
+
+    #[test]
     fn splitting_source_root_preserves_every_tab() {
         let mut dock = DockState::new(vec!["first", "second", "third"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());

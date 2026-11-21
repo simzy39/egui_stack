@@ -1259,6 +1259,45 @@ mod test {
     }
 
     #[test]
+    fn moving_tab_into_vacant_slot_creates_a_tree_and_invalidates_slot_identity() {
+        let mut dock = DockState::new(vec!["a", "b"]);
+        let vacant = dock.add_window(vec!["temporary"]);
+        let trailing = dock.add_window(vec!["trailing"]);
+        dock.remove_surface(vacant).unwrap();
+        assert!(dock.is_surface_valid(trailing));
+        let previous = dock.capture_surface_identity(vacant).unwrap();
+
+        assert!(dock.move_tab(
+            TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(0)),
+            TabDestination::EmptySurface(vacant),
+        ));
+        assert!(matches!(dock.get_surface(vacant), Some(Surface::Main(_))));
+        assert_eq!(dock.current_surface_identity(vacant), None);
+        assert_ne!(dock.capture_surface_identity(vacant), Some(previous));
+        assert_eq!(dock.find_tab(&"a").unwrap().surface, vacant);
+    }
+
+    #[test]
+    fn moving_leaf_into_vacant_slot_preserves_tabs_and_active_selection() {
+        let mut dock = DockState::new(vec!["a", "b"]);
+        let vacant = dock.add_window(vec!["temporary"]);
+        let trailing = dock.add_window(vec!["trailing"]);
+        dock.remove_surface(vacant).unwrap();
+        assert!(dock.is_surface_valid(trailing));
+        let previous = dock.capture_surface_identity(vacant).unwrap();
+
+        assert!(dock.move_node(
+            NodePath::new(SurfaceIndex::main(), NodeIndex::root()),
+            TabDestination::EmptySurface(vacant),
+        ));
+        assert!(matches!(dock.get_surface(vacant), Some(Surface::Main(_))));
+        assert_eq!(dock.current_surface_identity(vacant), None);
+        assert_ne!(dock.capture_surface_identity(vacant), Some(previous));
+        assert_eq!(dock.find_tab(&"a").unwrap().surface, vacant);
+        assert_eq!(dock.find_tab(&"b").unwrap().surface, vacant);
+    }
+
+    #[test]
     fn retaining_tabs_invalidates_identity_even_when_surface_stays_occupied() {
         let mut dock = DockState::new(vec!["keep", "remove"]);
         let other = dock.add_window(vec!["other"]);

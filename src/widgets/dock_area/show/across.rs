@@ -344,18 +344,7 @@ impl<Tab> DockArea<'_, Tab> {
         let src = source.component();
         match report.outcome {
             Outcome::Drop(destination) => {
-                if !self.reported_surface_identity_valid(
-                    &destination,
-                    report.destination_surface_identity,
-                ) || !self.reported_destination_identity_valid(
-                    &destination,
-                    report.destination_identity.as_ref(),
-                ) || !self.reported_insertion_order_valid(
-                    &destination,
-                    report.insertion_order.as_deref(),
-                    tab_viewer,
-                ) || !self.destination_valid(&destination)
-                {
+                if !self.resolve_reported_destination(&destination, &report, tab_viewer) {
                     return;
                 }
                 let surface = match destination {
@@ -526,6 +515,29 @@ impl<Tab> DockArea<'_, Tab> {
         node.get_grid()
             .filter(|grid| grid.drag_identity != 0)
             .map(|grid| DestinationIdentity::Grid(grid.drag_identity))
+    }
+
+    /// Resolve the reported target as a single fail-closed validation boundary.
+    ///
+    /// Retained reports are untrusted snapshots: neither a still-valid index nor
+    /// a still-valid node is sufficient if the enclosing surface was replaced.
+    fn resolve_reported_destination(
+        &mut self,
+        destination: &TabDestination,
+        report: &Report,
+        tab_viewer: &mut impl TabViewer<Tab = Tab>,
+    ) -> bool {
+        self.reported_surface_identity_valid(destination, report.destination_surface_identity)
+            && self.reported_destination_identity_valid(
+                destination,
+                report.destination_identity.as_ref(),
+            )
+            && self.reported_insertion_order_valid(
+                destination,
+                report.insertion_order.as_deref(),
+                tab_viewer,
+            )
+            && self.destination_valid(destination)
     }
 
     /// Reject retained node drops if their surface slot was recycled.

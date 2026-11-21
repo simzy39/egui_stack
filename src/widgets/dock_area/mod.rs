@@ -202,7 +202,7 @@ impl DockArea<'_, ()> {
             return false;
         }
         if response.is_pointer_button_down_on() && ui.input(|i| i.pointer.primary_pressed()) {
-            ui.data_mut(|d| d.insert_temp(BodyLeaf::press_id(body.dock_area), (body.path, response.id)));
+            ui.data_mut(|d| d.insert_temp(BodyLeaf::press_id(body.dock_area), (body.source, response.id)));
         }
         let dragged = response.dragged() && ui.input(|i| i.pointer.is_decidedly_dragging());
         if dragged {
@@ -224,6 +224,7 @@ struct BodyLeaf {
     dock_area: Id,
     path: NodePath,
     draggable: bool,
+    source: Option<DragSource>,
 }
 
 impl BodyLeaf {

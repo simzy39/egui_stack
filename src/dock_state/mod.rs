@@ -1484,6 +1484,41 @@ mod test {
     }
 
     #[test]
+    fn same_leaf_append_moves_first_tab_to_end_without_loss() {
+        let mut dock = DockState::new(vec!["a", "b", "c"]);
+        let root = NodePath::MAIN_ROOT;
+        assert!(dock.move_tab(
+            TabPath::new(root.surface, root.node, TabIndex(0)),
+            TabDestination::Node(root, TabInsert::Append),
+        ));
+        assert_eq!(dock.leaf(root).unwrap().tabs, ["b", "c", "a"]);
+    }
+
+    #[test]
+    fn same_leaf_insert_uses_pre_removal_index() {
+        let mut dock = DockState::new(vec!["a", "b", "c", "d"]);
+        let root = NodePath::MAIN_ROOT;
+        assert!(dock.move_tab(
+            TabPath::new(root.surface, root.node, TabIndex(0)),
+            TabDestination::Node(root, TabInsert::Insert(TabIndex(3))),
+        ));
+        assert_eq!(dock.leaf(root).unwrap().tabs, ["b", "c", "a", "d"]);
+    }
+
+    #[test]
+    fn rejected_stale_insertion_keeps_source_and_destination_unchanged() {
+        let mut dock = DockState::new(vec!["a", "b"]);
+        let root = NodePath::MAIN_ROOT;
+        let identity = dock.capture_surface_identity(root.surface).unwrap();
+        assert!(!dock.move_tab(
+            TabPath::new(root.surface, root.node, TabIndex(0)),
+            TabDestination::Node(root, TabInsert::Insert(TabIndex(99))),
+        ));
+        assert_eq!(dock.leaf(root).unwrap().tabs, ["a", "b"]);
+        assert_eq!(dock.current_surface_identity(root.surface), Some(identity));
+    }
+
+    #[test]
     fn rejected_move_preserves_surface_slot_identities() {
         let mut dock = DockState::new(vec!["a", "b"]);
         let other = dock.add_window(vec!["c"]);

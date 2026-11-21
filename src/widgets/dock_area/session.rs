@@ -69,6 +69,8 @@ pub(crate) struct Report {
     /// Structural identity of the destination node, captured when this report was made.
     /// None for empty surfaces, windows and non-drop outcomes.
     pub(crate) destination_identity: Option<DestinationIdentity>,
+    /// Identity of the occupied destination surface, independent of its slot index.
+    pub(crate) destination_surface_identity: Option<u64>,
     /// Ordered tab identities when a numeric insertion position was reported.
     /// A changed order invalidates the positional insertion instead of retargeting it.
     pub(crate) insertion_order: Option<Vec<egui::Id>>,

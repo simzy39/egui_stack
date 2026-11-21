@@ -265,6 +265,11 @@ impl<Tab> DockArea<'_, Tab> {
         tab_viewer: &mut impl TabViewer<Tab = Tab>,
     ) {
         let viewport = ui.ctx().viewport_id();
+        let destination_surface_identity = match &outcome {
+            Outcome::Drop(TabDestination::Node(path, _)) => self.dock_state.capture_surface_identity(path.surface),
+            Outcome::Drop(TabDestination::EmptySurface(_)) => None,
+            _ => None,
+        };
         let destination_identity = match &outcome {
             Outcome::Drop(TabDestination::Node(path, _)) => {
                 self.capture_destination_identity(*path)
@@ -295,6 +300,7 @@ impl<Tab> DockArea<'_, Tab> {
                     rank,
                     outcome,
                     destination_identity,
+                    destination_surface_identity,
                     insertion_order,
                     unfold,
                 },
@@ -337,7 +343,10 @@ impl<Tab> DockArea<'_, Tab> {
         let src = source.component();
         match report.outcome {
             Outcome::Drop(destination) => {
-                if !self.reported_destination_identity_valid(
+                if !self.reported_surface_identity_valid(
+                    &destination,
+                    report.destination_surface_identity,
+                ) || !self.reported_destination_identity_valid(
                     &destination,
                     report.destination_identity.as_ref(),
                 ) || !self.reported_insertion_order_valid(
@@ -516,6 +525,20 @@ impl<Tab> DockArea<'_, Tab> {
         node.get_grid()
             .filter(|grid| grid.drag_identity != 0)
             .map(|grid| DestinationIdentity::Grid(grid.drag_identity))
+    }
+
+    /// Reject retained node drops if their surface slot was recycled.
+    fn reported_surface_identity_valid(
+        &self,
+        destination: &TabDestination,
+        reported: Option<u64>,
+    ) -> bool {
+        match destination {
+            TabDestination::Node(path, _) => reported.is_some_and(|identity| {
+                self.dock_state.current_surface_identity(path.surface) == Some(identity)
+            }),
+            _ => reported.is_none(),
+        }
     }
 
     /// Whether a reported destination still identifies the exact node that was hovered.
@@ -832,6 +855,7 @@ mod tests {
                             TabInsert::Append,
                         )),
                         destination_identity,
+                        destination_surface_identity: None,
                         insertion_order: None,
                         unfold: None,
                     },
@@ -1073,6 +1097,7 @@ mod tests {
                 rank: 0,
                 outcome: Outcome::Drop(destination),
                 destination_identity,
+                destination_surface_identity: None,
                 insertion_order: None,
                 unfold: None,
             },
@@ -1111,6 +1136,7 @@ mod tests {
                     TabInsert::Append,
                 )),
                 destination_identity: Some(target_identity),
+                destination_surface_identity: None,
                 insertion_order: None,
                 unfold: None,
             },
@@ -1265,6 +1291,7 @@ mod tests {
                 rank: 0,
                 outcome: Outcome::Drop(TabDestination::Node(target_path, TabInsert::Append)),
                 destination_identity,
+                destination_surface_identity: None,
                 insertion_order: None,
                 unfold: None,
             },
@@ -1303,6 +1330,7 @@ mod tests {
                 rank: 0,
                 outcome: Outcome::Drop(TabDestination::Node(target_path, TabInsert::Append)),
                 destination_identity,
+                destination_surface_identity: None,
                 insertion_order: None,
                 unfold: None,
             },
@@ -1356,6 +1384,7 @@ mod tests {
                     TabInsert::Append,
                 )),
                 destination_identity,
+                destination_surface_identity: None,
                 insertion_order: None,
                 unfold: None,
             },

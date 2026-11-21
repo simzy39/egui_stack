@@ -46,6 +46,9 @@ use crate::{
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct DockState<Tab> {
     surfaces: Vec<Surface<Tab>>,
+    /// Runtime identities for occupied slots; never serialized.
+    #[cfg_attr(feature = "serde", serde(skip))]
+    surface_identities: Vec<u64>,
     focused_surface: Option<SurfaceIndex>, // Part of the tree which is in focus.
 
     /// Contains translations of text shown in [`DockArea`](crate::DockArea).
@@ -116,6 +119,7 @@ impl<Tab> DockState<Tab> {
     pub fn new(tabs: Vec<Tab>) -> Self {
         Self {
             surfaces: vec![Surface::Main(Tree::new(tabs))],
+            surface_identities: Vec::new(),
             focused_surface: None,
             translations: Translations::english(),
         }
@@ -179,10 +183,43 @@ impl<Tab> DockState<Tab> {
         matches!(self.surfaces.get(surface.0), Some(Surface::Window(..)))
     }
 
+    /// Capture the identity of an occupied surface, assigning one on first use.
+    /// Identities are runtime-only; reused indices receive new identities.
+    pub(crate) fn capture_surface_identity(&mut self, index: SurfaceIndex) -> Option<u64> {
+        if !self.is_surface_valid(index) {
+            return None;
+        }
+        if self.surface_identities.len() <= index.0 {
+            self.surface_identities.resize(index.0 + 1, 0);
+        }
+        let identity = &mut self.surface_identities[index.0];
+        if *identity == 0 {
+            static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+            *identity = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            assert_ne!(*identity, 0, "surface identity exhausted");
+        }
+        Some(*identity)
+    }
+
+    /// Read an identity without assigning one to a replacement surface.
+    pub(crate) fn current_surface_identity(&self, index: SurfaceIndex) -> Option<u64> {
+        self.is_surface_valid(index)
+            .then(|| self.surface_identities.get(index.0).copied())
+            .flatten()
+            .filter(|identity| *identity != 0)
+    }
+
+    fn invalidate_surface_identity(&mut self, index: SurfaceIndex) {
+        if let Some(identity) = self.surface_identities.get_mut(index.0) {
+            *identity = 0;
+        }
+    }
+
     /// Puts `tree` in a docked surface ([`Surface::Main`]): the first empty slot after the main
     /// surface, or a new one at the end.
     pub(crate) fn add_docked_surface(&mut self, tree: Tree<Tab>) -> SurfaceIndex {
         let index = self.find_empty_surface_index();
+        self.invalidate_surface_identity(index);
         let surface = Surface::Main(tree);
         if index.0 < self.surfaces.len() {
             self.surfaces[index.0] = surface;
@@ -201,6 +238,7 @@ impl<Tab> DockState<Tab> {
             Surface::Empty
         };
         let taken = std::mem::replace(self.surfaces.get_mut(surface.0)?, empty);
+        self.invalidate_surface_identity(surface);
         if self.focused_surface == Some(surface) {
             self.focused_surface = None;
         }
@@ -266,6 +304,7 @@ impl<Tab> DockState<Tab> {
         if self.focused_surface == Some(surface_index) {
             self.focused_surface = Some(SurfaceIndex::main());
         }
+        self.invalidate_surface_identity(surface_index);
         if surface_index.0 == self.surfaces.len() - 1 {
             self.surfaces.pop()
         } else {
@@ -733,6 +772,7 @@ impl<Tab> DockState<Tab> {
     pub fn add_window(&mut self, tabs: Vec<Tab>) -> SurfaceIndex {
         let surface = Surface::Window(Tree::new(tabs), WindowState::new());
         let index = self.find_empty_surface_index();
+        self.invalidate_surface_identity(index);
         if index.0 < self.surfaces.len() {
             self.surfaces[index.0] = surface;
         } else {
@@ -761,6 +801,7 @@ impl<Tab> DockState<Tab> {
     /// If `index` is not a valid `SurfaceIndex`
     fn ensure_tree(&mut self, index: SurfaceIndex) {
         if matches!(self.surfaces[index.0], Surface::Empty) {
+            self.invalidate_surface_identity(index);
             self.surfaces[index.0] = if index == SurfaceIndex::main() {
                 Surface::Main(Tree::new(vec![]))
             } else {
@@ -934,6 +975,7 @@ impl<Tab> DockState<Tab> {
             surfaces,
             focused_surface,
             translations,
+            ..
         } = self;
         // Emptied windows leave a hole, so that the surfaces after them keep their index.
         let mut surfaces: Vec<_> = surfaces
@@ -947,6 +989,7 @@ impl<Tab> DockState<Tab> {
             .filter(|focused| surfaces.get(focused.0).is_some_and(|s| !s.is_empty()));
         DockState {
             surfaces,
+            surface_identities: Vec::new(),
             focused_surface,
             translations: translations.clone(),
         }

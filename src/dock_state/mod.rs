@@ -1413,6 +1413,48 @@ mod test {
     }
 
     #[test]
+    fn rejected_move_preserves_surface_slot_identities() {
+        let mut dock = DockState::new(vec!["a", "b"]);
+        let other = dock.add_window(vec!["c"]);
+        let main = SurfaceIndex::main();
+        let main_id = dock.capture_surface_identity(main).unwrap();
+        let other_id = dock.capture_surface_identity(other).unwrap();
+
+        assert!(!dock.move_tab(
+            TabPath::new(main, NodeIndex::root(), TabIndex(99)),
+            TabDestination::Node(
+                NodePath::new(other, NodeIndex::root()),
+                TabInsert::Append,
+            ),
+        ));
+        assert_eq!(dock.current_surface_identity(main), Some(main_id));
+        assert_eq!(dock.current_surface_identity(other), Some(other_id));
+        assert_eq!(dock.find_tab(&"a").unwrap().surface, main);
+    }
+
+    #[test]
+    fn successful_cross_surface_move_invalidates_both_slots() {
+        let mut dock = DockState::new(vec!["a", "b"]);
+        let other = dock.add_window(vec!["c"]);
+        let main = SurfaceIndex::main();
+        let main_id = dock.capture_surface_identity(main).unwrap();
+        let other_id = dock.capture_surface_identity(other).unwrap();
+
+        assert!(dock.move_tab(
+            TabPath::new(main, NodeIndex::root(), TabIndex(0)),
+            TabDestination::Node(
+                NodePath::new(other, NodeIndex::root()),
+                TabInsert::Append,
+            ),
+        ));
+        assert_eq!(dock.current_surface_identity(main), None);
+        assert_eq!(dock.current_surface_identity(other), None);
+        assert_ne!(dock.capture_surface_identity(main), Some(main_id));
+        assert_ne!(dock.capture_surface_identity(other), Some(other_id));
+        assert_eq!(dock.find_tab(&"a").unwrap().surface, other);
+    }
+
+    #[test]
     fn indexed_tree_mutation_invalidates_only_its_surface_slot() {
         let mut dock = DockState::new(vec!["main"]);
         let extra = dock.add_window(vec!["other"]);

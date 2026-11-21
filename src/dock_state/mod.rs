@@ -395,15 +395,14 @@ impl<Tab> DockState<Tab> {
     ///
     /// This is the same as `&mut self[path]` but returns an error instead of panicking.
     pub fn node_mut(&mut self, path: NodePath) -> Result<&mut Node<Tab>> {
+        // Validate before invalidating the slot. A rejected mutable lookup is
+        // not a mutation and must not discard a retained surface identity.
+        self.node(path)?;
         self.invalidate_surface_identity(path.surface);
-        self.surfaces
-            .get_mut(path.surface.0)
-            .ok_or(Error::InvalidSurface)?
+        Ok(&mut self.surfaces[path.surface.0]
             .node_tree_mut()
-            .ok_or(Error::EmptySurface)?
-            .nodes
-            .get_mut(path.node.0)
-            .ok_or(Error::InvalidNode)
+            .expect("validated surface tree")
+            .nodes[path.node.0])
     }
 
     /// Immutably borrows a leaf node at the given `path`.
@@ -1410,6 +1409,18 @@ mod test {
         assert_ne!(restored.capture_surface_identity(other), Some(original_other));
         assert!(restored.find_tab(&"main").is_some());
         assert!(restored.find_tab(&"other").is_some());
+    }
+
+    #[test]
+    fn rejected_mutable_node_lookup_preserves_surface_identity() {
+        let mut dock = DockState::new(vec!["main"]);
+        let main = SurfaceIndex::main();
+        let identity = dock.capture_surface_identity(main).unwrap();
+        let missing = NodePath::new(main, NodeIndex(999));
+
+        assert!(dock.node_mut(missing).is_err());
+        assert!(dock.leaf_mut(missing).is_err());
+        assert_eq!(dock.current_surface_identity(main), Some(identity));
     }
 
     #[test]

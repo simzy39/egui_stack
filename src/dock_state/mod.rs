@@ -1198,6 +1198,34 @@ mod test {
     }
 
     #[test]
+    fn moving_floating_group_into_main_preserves_selection_and_closes_source() {
+        let mut dock = DockState::new(vec!["main"]);
+        let window = dock.add_window(vec!["first", "second", "third"]);
+        let source = NodePath::new(window, NodeIndex::root());
+        let target = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        dock.leaf_mut(source).unwrap().active = TabIndex(1);
+
+        assert!(dock.move_node(source, TabDestination::Node(target, TabInsert::Append)));
+        assert_eq!(
+            dock.leaf(target).unwrap().tabs,
+            ["main", "first", "second", "third"]
+        );
+        assert_eq!(dock.leaf(target).unwrap().active, TabIndex(2));
+        assert!(dock.get_surface(window).is_none_or(Surface::is_empty));
+    }
+
+    #[test]
+    fn moving_last_floating_tab_into_main_closes_source() {
+        let mut dock = DockState::new(vec!["main"]);
+        let window = dock.add_window(vec!["floating"]);
+        let source = TabPath::new(window, NodeIndex::root(), TabIndex(0));
+        let target = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        assert!(dock.move_tab(source, TabDestination::Node(target, TabInsert::Append)));
+        assert_eq!(dock.leaf(target).unwrap().tabs, ["main", "floating"]);
+        assert!(dock.get_surface(window).is_none_or(Surface::is_empty));
+    }
+
+    #[test]
     fn moving_group_into_split_of_ancestor_preserves_every_tab() {
         let mut dock = DockState::new(vec!["first", "second"]);
         let [left, _right] = dock.main_surface_mut().split_right(

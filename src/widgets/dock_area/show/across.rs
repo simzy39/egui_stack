@@ -765,10 +765,11 @@ mod tests {
         let mut area = DockArea::new(&mut dock);
         let id = area.dock_state.leaf_mut(root).unwrap().ensure_drag_identity();
         let source = DragSource::Group { path: root, id };
-        area.dock_state.main_surface_mut()
+        let [old, _new] = area.dock_state.main_surface_mut()
             .split_right(NodeIndex::root(), 0.5, vec!["new"]);
+        assert_ne!(old, NodeIndex::root());
         assert!(!area.drag_source_valid(source, &mut viewer));
-        let relocated = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
+        let relocated = NodePath::new(SurfaceIndex::main(), old);
         assert!(area.group_source_valid(relocated, id));
     }
 

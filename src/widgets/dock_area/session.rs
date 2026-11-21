@@ -18,7 +18,7 @@
 
 use std::collections::BTreeMap;
 
-use egui::{Pos2, Rect, ViewportId};
+use egui::{Id, Pos2, Rect, ViewportId};
 
 use super::drag_and_drop::TreeComponent;
 use crate::layout::ZoneName;
@@ -34,6 +34,8 @@ pub(crate) const RELEASED_PASSES: u8 = 12;
 pub(crate) struct DragSession {
     /// What is dragged: a tab, or a whole group (a leaf).
     pub(crate) src: TreeComponent,
+    /// The original tab's viewer ID, for single-tab drags.
+    pub(crate) tab_id: Option<Id>,
     /// The dragged leaf's rect in the source, whose size a new float takes.
     pub(crate) rect: Rect,
     /// The viewport the drag began in.
@@ -96,10 +98,17 @@ impl DragSession {
         }
     }
 
-    pub(crate) fn new(src: TreeComponent, rect: Rect, source: ViewportId, local: Pos2) -> Self {
+    pub(crate) fn new(
+        src: TreeComponent,
+        rect: Rect,
+        tab_id: Option<Id>,
+        source: ViewportId,
+        local: Pos2,
+    ) -> Self {
         Self {
             src,
             rect,
+            tab_id,
             source,
             local,
             desktop: None,

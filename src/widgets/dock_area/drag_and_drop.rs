@@ -61,6 +61,8 @@ impl HoverData {
 pub(crate) struct DragData {
     pub src: TreeComponent,
     pub rect: Rect,
+    /// The original tab's viewer ID; whole-group drags have no tab identity.
+    pub tab_id: Option<Id>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -641,6 +643,7 @@ mod tests {
                     drag: DragData {
                         src: TreeComponent::Node(source),
                         rect,
+                        tab_id: None,
                     },
                     pointer: center + offset,
                     locked: None,
@@ -701,6 +704,7 @@ mod tests {
                                 NodeIndex(2),
                             )),
                             rect,
+                            tab_id: None,
                         },
                         pointer: rect.center(),
                         locked: None,

@@ -155,6 +155,7 @@ impl<Tab> DockArea<'_, Tab> {
                     TreeComponent::Tab(path),
                     Rect::from_min_size(mouse_pos, size),
                     None,
+                    None,
                 ));
             } else {
                 self.dock_state.eject_tab(path, mouse_pos);
@@ -164,14 +165,21 @@ impl<Tab> DockArea<'_, Tab> {
         for (path, destination) in std::mem::take(&mut self.to_move_group) {
             match destination {
                 TabDestination::Window(rect) if self.floats_on() => {
-                    self.to_float.push((TreeComponent::Node(path), rect, None));
+                    self.to_float.push((TreeComponent::Node(path), rect, None, None));
                 }
                 destination => self.dock_state.move_node(path, destination),
             }
         }
 
-        for (source, rect, host) in std::mem::take(&mut self.to_float) {
-            self.float_out(ui.ctx(), source, rect, host, tab_viewer);
+        for (source, rect, host, tab_id) in std::mem::take(&mut self.to_float) {
+            let valid = if tab_id.is_some() {
+                self.drag_source_valid(&source, tab_id, tab_viewer)
+            } else {
+                self.source_valid(&source)
+            };
+            if valid {
+                self.float_out(ui.ctx(), source, rect, host, tab_viewer);
+            }
         }
 
         if let Some(focused) = self.new_focused {
@@ -182,6 +190,10 @@ impl<Tab> DockArea<'_, Tab> {
             remove_empty_docks(self.dock_state, space.docks);
         }
 
+        if !ui.input(|i| i.pointer.primary_down()) {
+            state.tab_press = None;
+            state.tab_drag_cancelled = false;
+        }
         state.store(ui.ctx(), self.id);
     }
 
@@ -199,7 +211,15 @@ impl<Tab> DockArea<'_, Tab> {
         state.tab_in_air = None;
         state.dragged_node = None;
 
-        if self.drag_lost(ui, state) {
+        // A press can survive the drag threshold or a layout change. Validate it before
+        // resolving any cached data, and suppress the old widget until the button is up.
+        if let Some((_, path, tab_id)) = state.tab_press
+            && self.tab_identity(path, tab_viewer) != Some(tab_id)
+        {
+            self.cancel_tab_drag(ui, state);
+        }
+
+        if state.tab_drag_cancelled || self.drag_lost(ui, state) {
             // Ends as on Escape: nothing dropped, the ghost gone.
             ui.memory_mut(|mem| {
                 mem.data
@@ -213,11 +233,15 @@ impl<Tab> DockArea<'_, Tab> {
                     .floating
                     .session
                     .as_ref()
-                    .is_some_and(|session| session.source == viewport && session.released.is_none())
+                    .is_some_and(|session| {
+                        session.source == viewport
+                            && (state.tab_drag_cancelled || session.released.is_none())
+                    })
             {
                 space.floating.session = None;
             }
             state.reset_drag();
+            state.tab_press = None;
             self.forget_no_drop();
             self.forget_verdicts();
             ui.ctx().request_repaint();
@@ -248,8 +272,11 @@ impl<Tab> DockArea<'_, Tab> {
 
         if drag_data
             .as_ref()
-            .is_some_and(|drag: &DragData| !self.source_valid(&drag.src))
+            .is_some_and(|drag: &DragData| !self.drag_source_valid(&drag.src, drag.tab_id, tab_viewer))
         {
+            if drag_data.as_ref().is_some_and(|drag| drag.tab_id.is_some()) {
+                self.cancel_tab_drag(ui, state);
+            }
             drag_data = None;
             if let Some(space) = self.space.as_mut()
                 && space
@@ -268,10 +295,10 @@ impl<Tab> DockArea<'_, Tab> {
             state.tab_in_air = None;
             self.forget_verdicts();
         }
-        if state
-            .dnd
-            .as_ref()
-            .is_some_and(|dnd| !self.source_valid(&dnd.drag.src) || !self.hover_valid(&dnd.hover))
+        if state.dnd.as_ref().is_some_and(|dnd| {
+            !self.drag_source_valid(&dnd.drag.src, dnd.drag.tab_id, tab_viewer)
+                || !self.hover_valid(&dnd.hover)
+        })
         {
             state.dnd = None;
             state.window_fade = None;
@@ -304,7 +331,7 @@ impl<Tab> DockArea<'_, Tab> {
         };
         if drag_data
             .as_ref()
-            .is_some_and(|drag| !self.source_valid(&drag.src))
+            .is_some_and(|drag| !self.drag_source_valid(&drag.src, drag.tab_id, tab_viewer))
         {
             drag_data = None;
             state.reset_drag();
@@ -422,12 +449,14 @@ impl<Tab> DockArea<'_, Tab> {
                 if let (Some(zone), Some(space)) = (unfold.clone(), &mut self.space) {
                     space.no_drop.unfolds.push(zone);
                 }
-                let source = state.dnd.as_ref().unwrap().drag.src.clone();
+                let drag = &state.dnd.as_ref().unwrap().drag;
+                let source = drag.src.clone();
+                let tab_id = drag.tab_id;
                 match destination {
                     // Out of every dock, once the space's floats are drawn: a float.
                     TabDestination::Window(rect) if self.floats_on() => {
                         let host = self.release_host(rect.min);
-                        self.to_float.push((source, rect, host));
+                        self.to_float.push((source, rect, host, tab_id));
                     }
                     destination => {
                         self.apply_move(source, destination, tab_viewer);
@@ -449,11 +478,23 @@ impl<Tab> DockArea<'_, Tab> {
 
         if released {
             state.reset_drag();
+            state.tab_press = None;
             #[cfg(feature = "bus")]
             if let Some(bus) = self.space.as_ref().and_then(|space| space.bus) {
                 bus.forget_verdicts();
             }
         }
+    }
+
+    /// Cancels a tab whose identity changed under the pointer. Keep the widget suppressed
+    /// for the rest of this press, so the next occupant of its slot cannot restart the drag.
+    fn cancel_tab_drag(&self, ui: &Ui, state: &mut State) {
+        state.tab_drag_cancelled = true;
+        state.tab_press = None;
+        state.reset_drag();
+        state.dragged = None;
+        state.tab_in_air = None;
+        ui.ctx().stop_dragging();
     }
 
     /// Whether the drag begun in this area lost its release, which it then cancels: the window
@@ -475,6 +516,7 @@ impl<Tab> DockArea<'_, Tab> {
                 return false;
             }
             state.drag_lost = None;
+            state.tab_press = None;
         }
         let Some(dragged) = ctx.dragged_id() else {
             return false;

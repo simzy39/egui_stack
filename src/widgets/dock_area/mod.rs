@@ -76,6 +76,7 @@ pub struct DockArea<'tree, Tab> {
         drag_and_drop::TreeComponent,
         Rect,
         Option<crate::layout::FloatHost>,
+        Option<Id>,
     )>,
     new_focused: Option<NodePath>,
     tab_hover_rect: Option<(Rect, TabIndex)>,

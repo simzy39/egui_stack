@@ -147,7 +147,7 @@ impl<Tab> DockArea<'_, Tab> {
         );
 
         if tab_bar_hidden {
-            self.hidden_tab_bar_controls(ui, state, path, tabbar_rect, style);
+            self.hidden_tab_bar_controls(ui, state, path, tabbar_rect, style, tab_viewer);
         }
 
         // A handle of the body (`DockArea::drag_group_by`) asked to drag the group.
@@ -181,6 +181,7 @@ impl<Tab> DockArea<'_, Tab> {
         path: NodePath,
         tabbar_rect: Rect,
         fade_style: Option<&Style>,
+        tab_viewer: &mut impl TabViewer<Tab = Tab>,
     ) {
         let style = fade_style.unwrap_or_else(|| self.style.as_ref().unwrap());
         let btn_size = style.buttons.show_tab_bar_size;
@@ -262,6 +263,10 @@ impl<Tab> DockArea<'_, Tab> {
             .hidden_tab_bar_drag_height
             .is_none_or(|h| h > 0.0);
         if self.draggable_tabs && drag_enabled && !on_button {
+            if !self.hidden_tab_bar_drags_group && drag_response.is_pointer_button_down_on() {
+                let active = self.dock_state.leaf(path).unwrap().active;
+                self.remember_tab_press(ui, state, drag_id, (path, active).into(), tab_viewer);
+            }
             if drag_response.hovered() {
                 ui.output_mut(|o| o.cursor_icon = CursorIcon::Grab);
             }
@@ -276,7 +281,7 @@ impl<Tab> DockArea<'_, Tab> {
                         .get_leaf()
                         .expect("This node must be a leaf")
                         .active;
-                    self.try_initiate_tab_drag(ui, state, path, active);
+                    self.try_initiate_tab_drag(ui, state, drag_id, (path, active).into(), tab_viewer);
                 }
             }
         }
@@ -808,6 +813,10 @@ impl<Tab> DockArea<'_, Tab> {
                 (response, title_id)
             };
 
+            if self.draggable_tabs && (response.is_pointer_button_down_on() || is_being_dragged) {
+                self.remember_tab_press(tabs_ui, state, id, (path, tab_index).into(), tab_viewer);
+            }
+
             if is_being_dragged {
                 let carries_group = *state
                     .drag_carries_group
@@ -815,7 +824,7 @@ impl<Tab> DockArea<'_, Tab> {
                 if carries_group {
                     self.try_initiate_node_drag(tabs_ui, state, path);
                 } else {
-                    self.try_initiate_tab_drag(tabs_ui, state, path, tab_index);
+                    self.try_initiate_tab_drag(tabs_ui, state, id, (path, tab_index).into(), tab_viewer);
                 }
             }
 
@@ -1798,6 +1807,9 @@ impl<Tab> DockArea<'_, Tab> {
 
     /// As [`try_initiate_tab_drag`](Self::try_initiate_tab_drag), for a whole leaf.
     fn try_initiate_node_drag(&self, ui: &Ui, state: &mut State, path: NodePath) {
+        if state.tab_drag_cancelled || state.drag_lost.is_some() {
+            return;
+        }
         let Some(pointer_pos) = ui.ctx().pointer_interact_pos() else {
             return;
         };
@@ -1816,21 +1828,59 @@ impl<Tab> DockArea<'_, Tab> {
                     Some(DragData {
                         src: TreeComponent::Node(path),
                         rect: self.dock_state[path].rect().unwrap(),
+                        tab_id: None,
                     }),
                 );
             });
         }
     }
 
-    /// Checks if a drag has exceeded the movement threshold, and if so,
-    /// stores DragData for the given tab.
-    fn try_initiate_tab_drag(
-        &self,
+    /// Records a tab's identity once, while the originating widget is held, even before the
+    /// drag activation distance is reached.
+    fn remember_tab_press(
+        &mut self,
         ui: &Ui,
         state: &mut State,
-        path: NodePath,
-        tab_index: TabIndex,
+        widget: Id,
+        path: TabPath,
+        tab_viewer: &mut impl TabViewer<Tab = Tab>,
     ) {
+        if state.tab_press.is_some()
+            || state.tab_drag_cancelled
+            || state.drag_lost.is_some()
+            || !ui.input(|i| i.pointer.primary_down())
+        {
+            return;
+        }
+        if let Some(tab_id) = self.tab_identity(path, tab_viewer) {
+            state.tab_press = Some((widget, path, tab_id));
+        }
+    }
+
+    /// Checks if a drag has exceeded the movement threshold, and if so,
+    /// stores DragData for the original tab, not a replacement in its slot.
+    fn try_initiate_tab_drag(
+        &mut self,
+        ui: &Ui,
+        state: &mut State,
+        widget: Id,
+        path: TabPath,
+        tab_viewer: &mut impl TabViewer<Tab = Tab>,
+    ) {
+        self.remember_tab_press(ui, state, widget, path, tab_viewer);
+        if state.tab_drag_cancelled || state.drag_lost.is_some() {
+            return;
+        }
+        let Some((pressed_widget, pressed_path, tab_id)) = state.tab_press else {
+            return;
+        };
+        if pressed_widget != widget
+            || pressed_path != path
+            || self.tab_identity(path, tab_viewer) != Some(tab_id)
+        {
+            self.cancel_tab_drag(ui, state);
+            return;
+        }
         let Some(pointer_pos) = ui.ctx().pointer_interact_pos() else {
             return;
         };
@@ -1841,15 +1891,16 @@ impl<Tab> DockArea<'_, Tab> {
             return;
         }
         state.dragged = Some(DraggedTab {
-            path: (path, tab_index).into(),
+            path,
             pointer: pointer_pos,
         });
         ui.memory_mut(|mem| {
             mem.data.insert_temp(
                 self.id.with("drag_data"),
                 Some(DragData {
-                    src: TreeComponent::Tab((path, tab_index).into()),
-                    rect: self.dock_state[path].rect().unwrap(),
+                    src: TreeComponent::Tab(path),
+                    rect: self.dock_state[path.node_path()].rect().unwrap(),
+                    tab_id: Some(tab_id),
                 }),
             );
         });

@@ -803,3 +803,54 @@ fn a_float_moved_to_a_screen_of_another_scale_during_a_drag_takes_the_drop_witho
         .count();
     assert_eq!(moves, 1, "its move said once");
 }
+
+#[test]
+#[cfg_attr(miri, ignore = "drives a whole UI; too slow under Miri")]
+fn replacing_a_tab_during_a_remote_drag_cancels_it() {
+    let mut multi = Multi::new();
+    let mut app = app();
+    let at = with_float(&mut multi, &mut app);
+    let b = tab_rect(&app, "B").center();
+    let over = float_middle(at, 1.0);
+    multi.press(ViewportId::ROOT, b, frame(&mut app));
+    multi.move_held(ViewportId::ROOT, b, over, frame(&mut app));
+    assert!(app.docked.space.dragging().is_some());
+
+    let main = app.docked.space.dock_surface("main").unwrap();
+    let path = egui_stack::NodePath::new(main, NodeIndex::root());
+    app.docked.space.state_mut().leaf_mut(path).unwrap().tabs_mut()[1] =
+        "Replacement".to_owned();
+    multi.passes(5, frame(&mut app));
+    multi.release(ViewportId::ROOT, over, frame(&mut app));
+    multi.passes(3, frame(&mut app));
+    assert_eq!(tabs(&app, "main"), ["A", "Replacement"]);
+    assert_eq!(tabs(&app, "float-1"), ["C"]);
+    assert!(app.docked.space.dragging().is_none());
+    assert!(app.docked.layout.float("float-2").is_none());
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "drives a whole UI; too slow under Miri")]
+fn replacing_a_tab_during_a_delayed_remote_release_cancels_it() {
+    let mut multi = Multi::new();
+    multi.hide_positions();
+    let mut app = app();
+    with_float(&mut multi, &mut app);
+    let b = tab_rect(&app, "B").center();
+    let past = pos2(900.0, 200.0);
+    multi.press(ViewportId::ROOT, b, frame(&mut app));
+    multi.move_held(ViewportId::ROOT, b, past, frame(&mut app));
+    multi.release(ViewportId::ROOT, past, frame(&mut app));
+    assert!(app.docked.space.dragging().is_some_and(|drag| drag.released));
+
+    let main = app.docked.space.dock_surface("main").unwrap();
+    let path = egui_stack::NodePath::new(main, NodeIndex::root());
+    app.docked.space.state_mut().leaf_mut(path).unwrap().tabs_mut()[1] =
+        "Replacement".to_owned();
+    multi.queue(viewport("float-1"), Event::PointerMoved((FLOAT / 2.0).to_pos2()));
+    multi.passes(20, frame(&mut app));
+    assert_eq!(tabs(&app, "main"), ["A", "Replacement"]);
+    assert_eq!(tabs(&app, "float-1"), ["C"]);
+    assert!(app.docked.space.dragging().is_none());
+    assert!(app.docked.layout.float("float-2").is_none());
+}

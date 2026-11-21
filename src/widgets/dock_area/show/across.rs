@@ -1,7 +1,7 @@
 //! The drag of a space across viewports, as each viewport's area sees it: see
 //! [`session`](crate::dock_area::session).
 
-use egui::{Key, Pos2, Rect, Ui};
+use egui::{Id, Key, Pos2, Rect, Ui};
 
 use super::super::{
     drag_and_drop::{DragData, TreeComponent, make_overlay_painter},
@@ -40,11 +40,13 @@ impl<Tab> DockArea<'_, Tab> {
         drag_data: &mut Option<DragData>,
         tab_viewer: &mut impl TabViewer<Tab = Tab>,
     ) -> Across {
-        if self
+        let session_source = self
             .space
             .as_ref()
             .and_then(|space| space.floating.session.as_ref())
-            .is_some_and(|session| !self.source_valid(&session.src))
+            .map(|session| (session.src.clone(), session.tab_id));
+        if session_source
+            .is_some_and(|(src, tab_id)| !self.drag_source_valid(&src, tab_id, tab_viewer))
         {
             if let Some(space) = self.space.as_mut() {
                 space.floating.session = None;
@@ -85,6 +87,7 @@ impl<Tab> DockArea<'_, Tab> {
                 Some(session)
                     if session.source == viewport
                         && session.src == drag.src
+                        && session.tab_id == drag.tab_id
                         && session.released.is_none() =>
                 {
                     session
@@ -92,6 +95,7 @@ impl<Tab> DockArea<'_, Tab> {
                 slot => slot.insert(DragSession::new(
                     drag.src.clone(),
                     drag.rect,
+                    drag.tab_id,
                     viewport,
                     local,
                 )),
@@ -119,7 +123,7 @@ impl<Tab> DockArea<'_, Tab> {
                 }
                 return Across::Here;
             }
-            let (src, size) = (session.src.clone(), session.rect.size());
+            let (src, size, tab_id) = (session.src.clone(), session.rect.size(), session.tab_id);
             // Released outside, where no viewport could tell the pointer was over it: the first
             // that sees it over one of its docks within a few passes takes it.
             let wait = remote.is_none() && session.outside && session.desktop.is_none() && others;
@@ -135,7 +139,7 @@ impl<Tab> DockArea<'_, Tab> {
                 return Across::Here;
             };
             let rect = Rect::from_min_size(local, size);
-            self.release_over(report, src, rect, tab_viewer);
+            self.release_over(report, src, rect, tab_id, tab_viewer);
             state.reset_drag();
             state.dnd = None;
             self.forget_verdicts();
@@ -153,12 +157,13 @@ impl<Tab> DockArea<'_, Tab> {
             return match session.released {
                 Some(0) => {
                     // Nobody took it: as over nothing, a new float.
-                    let (src, rect) = (
+                    let (src, rect, tab_id) = (
                         session.src.clone(),
                         Rect::from_min_size(session.local, session.rect.size()),
+                        session.tab_id,
                     );
                     space.floating.session = None;
-                    self.release_free(src, rect, tab_viewer);
+                    self.release_free(src, rect, tab_id, tab_viewer);
                     self.forget_verdicts();
                     Across::Done
                 }
@@ -203,15 +208,16 @@ impl<Tab> DockArea<'_, Tab> {
             }
             return Across::Done;
         };
-        let (src, rect, take) = (
+        let (src, rect, tab_id, take) = (
             session.src.clone(),
             session.rect,
+            session.tab_id,
             session.released.is_some(),
         );
         state.remote = true;
         state.last_hover_pos = Some(pointer);
         state.drag_start.get_or_insert(pointer);
-        *drag_data = Some(DragData { src, rect });
+        *drag_data = Some(DragData { src, rect, tab_id });
         ctx.request_repaint();
         Across::Remote { take }
     }
@@ -264,7 +270,7 @@ impl<Tab> DockArea<'_, Tab> {
             );
             return;
         }
-        let (src, rect) = (session.src.clone(), session.rect);
+        let (src, rect, tab_id) = (session.src.clone(), session.rect, session.tab_id);
         match outcome {
             // Over none of its docks: another viewport may still take it.
             Outcome::Free => return,
@@ -277,7 +283,7 @@ impl<Tab> DockArea<'_, Tab> {
             outcome,
             unfold,
         };
-        self.release_over(report, src, rect, tab_viewer);
+        self.release_over(report, src, rect, tab_id, tab_viewer);
         Self::idle(state);
         self.forget_verdicts();
         ui.ctx().request_repaint();
@@ -290,9 +296,10 @@ impl<Tab> DockArea<'_, Tab> {
         report: Report,
         src: TreeComponent,
         rect: Rect,
+        tab_id: Option<Id>,
         tab_viewer: &mut impl TabViewer<Tab = Tab>,
     ) {
-        if !self.source_valid(&src) {
+        if !self.drag_source_valid(&src, tab_id, tab_viewer) {
             return;
         }
         match report.outcome {
@@ -336,7 +343,7 @@ impl<Tab> DockArea<'_, Tab> {
                 }
             }
             Outcome::Refused => {}
-            Outcome::Free => self.release_free(src, rect, tab_viewer),
+            Outcome::Free => self.release_free(src, rect, tab_id, tab_viewer),
         }
     }
 
@@ -346,9 +353,10 @@ impl<Tab> DockArea<'_, Tab> {
         &mut self,
         src: TreeComponent,
         rect: Rect,
+        tab_id: Option<Id>,
         tab_viewer: &mut impl TabViewer<Tab = Tab>,
     ) {
-        if !self.floats_on() || !self.source_valid(&src) {
+        if !self.floats_on() || !self.drag_source_valid(&src, tab_id, tab_viewer) {
             return;
         }
         let may = match src {
@@ -366,7 +374,32 @@ impl<Tab> DockArea<'_, Tab> {
                 .refusal_of(&src, tab_viewer, &destination, true)
                 .is_none()
         {
-            self.to_float.push((src, rect, Some(host)));
+            self.to_float.push((src, rect, Some(host), tab_id));
+        }
+    }
+
+    /// Looks up a logical tab ID without assuming the cached path is still valid.
+    pub(super) fn tab_identity(
+        &mut self,
+        path: TabPath,
+        tab_viewer: &mut impl TabViewer<Tab = Tab>,
+    ) -> Option<Id> {
+        let tab = self.dock_state.leaf_mut(path.node_path()).ok()?.tabs.get_mut(path.tab.0)?;
+        Some(tab_viewer.id(tab))
+    }
+
+    /// A retained drag must still refer to its original tab, not just a valid slot.
+    pub(super) fn drag_source_valid(
+        &mut self,
+        src: &TreeComponent,
+        tab_id: Option<Id>,
+        tab_viewer: &mut impl TabViewer<Tab = Tab>,
+    ) -> bool {
+        match *src {
+            TreeComponent::Tab(path) => {
+                tab_id.is_some() && self.tab_identity(path, tab_viewer) == tab_id
+            }
+            _ => self.source_valid(src),
         }
     }
 
@@ -627,6 +660,7 @@ mod tests {
                     },
                     src,
                     rect,
+                    (!group).then(|| Id::unique("restricted")),
                     &mut viewer,
                 );
                 let tabs = area.dock_state[NodePath::new(target, NodeIndex::root())]

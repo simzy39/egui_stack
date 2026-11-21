@@ -332,14 +332,20 @@ dock layout separately.
 ### Programmatic tab moves and invalid paths
 
 `DockState::move_tab` and `DockState::move_node` return `false` when their source or
-destination is invalid; validation happens before the source is removed. Moving the last tab
+destination is invalid or the move is a no-op; validation happens before the source is removed. Moving the last tab
 out of a leaf removes the empty leaf, and an emptied floating window is removed.
 
 `DockState::remove_tab` returns `None` for an invalid tab, and
 `DockState::remove_leaf` returns `false` for invalid paths or non-leaf nodes.
 `DockState::detach_tab` and `DockState::eject_tab` return
 `Option<SurfaceIndex>`: `None` means no window was created because the tab source was
-invalid. Callers must handle these results rather than assuming the operation succeeded.
+invalid or the window geometry is not finite and positive. `remove_surface` returns
+`Option<Surface<Tab>>` and refuses the main surface. Callers must handle these results
+rather than assuming the operation succeeded. Paths and indices are positions: reacquire
+them after restructuring or removal, since a slot can be reused.
+
+See [Docking integrity](docking-integrity.md) for transaction, identity, selection,
+serialization and retained drag contracts.
 
 A saved `TabPlace` describes a preferred restoration position, not a guaranteed
 destination. `DockSpace::restore_at` attempts a usable recorded dock, then its saved

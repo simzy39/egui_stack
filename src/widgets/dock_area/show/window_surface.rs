@@ -10,10 +10,9 @@ use crate::{
     widgets::painter::{Attached, corners_within},
 };
 
-/// The layer of the floating window showing `surf_index`: an [`egui::Window`] is an area of
-/// [`Order::Middle`].
-pub(super) fn window_layer_id(surf_index: SurfaceIndex) -> LayerId {
-    LayerId::new(Order::Middle, Id::unique(format!("window {surf_index:?}")))
+/// Window interaction state belongs to this area's runtime window instance.
+pub(super) fn window_layer_id(area: Id, identity: u64) -> LayerId {
+    LayerId::new(Order::Middle, area.with(("window", identity)))
 }
 
 impl<Tab> DockArea<'_, Tab> {
@@ -25,8 +24,17 @@ impl<Tab> DockArea<'_, Tab> {
         state: &mut State,
         fade_style: Option<(&Style, f32, SurfaceIndex)>,
     ) {
+        if self.dock_state[surf_index].num_tabs() == 0 {
+            self.to_remove.push(TabRemoval::Window(surf_index));
+            return;
+        }
         // Construct egui window
-        let id = window_layer_id(surf_index).id;
+        let identity = self
+            .dock_state
+            .get_window_state_mut(surf_index)
+            .unwrap()
+            .ensure_identity();
+        let id = window_layer_id(self.id, identity).id;
         let bounds = self.window_bounds.unwrap();
         let open = true;
         // egui sizes a window by its outer size: the frame's margins and stroke come on top of
@@ -62,7 +70,9 @@ impl<Tab> DockArea<'_, Tab> {
                     }
                     unreachable!("a window surface should never be empty")
                 });
-            let leaf = self.dock_state[surf_index][node_id].get_leaf_mut().unwrap();
+            let leaf = self.dock_state.tree_for_ui(surf_index)[node_id]
+                .get_leaf_mut()
+                .unwrap();
             tab_viewer
                 .title(&mut leaf.tabs[leaf.active.0])
                 .color(ui.visuals().widgets.noninteractive.fg_stroke.color)
@@ -396,7 +406,7 @@ impl<Tab> DockArea<'_, Tab> {
             .get_window_state(surf_index)
             .unwrap()
             .is_minimized();
-        let surface = &mut self.dock_state[surf_index];
+        let surface = self.dock_state.tree_for_ui(surf_index);
 
         if surface.root_node().is_some_and(|node| node.is_collapsed()) {
             // The window is already fully collapsed,

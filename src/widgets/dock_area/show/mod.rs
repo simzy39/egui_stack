@@ -96,71 +96,114 @@ impl<Tab> DockArea<'_, Tab> {
             );
         }
 
-        for removal in self.to_remove.drain(..).rev() {
+        if let Some(focused) = self.new_focused.take() {
+            self.dock_state.set_focused_node_and_surface(focused);
+        }
+        // Capture every command before the first removal can promote a sibling
+        // or retire a window. Later commands resolve the original component,
+        // rather than interpreting an old position in the restructured tree.
+        let removals: Vec<_> = std::mem::take(&mut self.to_remove)
+            .into_iter()
+            .map(|removal| {
+                let source = match removal {
+                    TabRemoval::Tab(path, _) => self
+                        .tab_identity(path, tab_viewer)
+                        .map(|id| DragSource::Tab { path, id }),
+                    TabRemoval::Node(path) => {
+                        self.dock_state
+                            .leaf_for_ui(path)
+                            .ok()
+                            .map(|leaf| DragSource::Group {
+                                path,
+                                id: leaf.ensure_drag_identity(),
+                            })
+                    }
+                    TabRemoval::Window(_) => None,
+                };
+                (removal, source)
+            })
+            .collect();
+        for (removal, source) in removals.into_iter().rev() {
+            let source = source.and_then(|source| self.resolve_removal_source(source, tab_viewer));
             match removal {
-                TabRemoval::Tab(path, ForcedRemoval(is_forced)) => {
+                TabRemoval::Tab(_, ForcedRemoval(is_forced)) => {
+                    let Some(TreeComponent::Tab(path)) = source else {
+                        continue;
+                    };
                     if is_forced {
                         self.dock_state.remove_tab(path);
                     } else {
-                        let leaf = &mut self.dock_state.leaf_mut(path.node_path()).unwrap();
+                        let leaf = self
+                            .dock_state
+                            .leaf_for_ui(path.node_path())
+                            .expect("resolved tab");
                         match tab_viewer.on_close(&mut leaf.tabs[path.tab.0]) {
                             OnCloseResponse::Close => {
                                 self.dock_state.remove_tab(path);
                             }
                             OnCloseResponse::Focus => {
-                                leaf.active = path.tab;
-                                self.new_focused = Some(path.node_path());
+                                self.dock_state.focus_tab(path).expect("resolved tab");
                             }
-                            OnCloseResponse::Ignore => {
-                                // no-op
-                            }
+                            OnCloseResponse::Ignore => {}
                         }
                     }
                 }
-                TabRemoval::Node(path) => {
-                    let mut all_tabs_are_closable = true;
-                    for tab in self.dock_state[path].iter_tabs_mut() {
-                        if !(tab_viewer.is_closeable(tab)
-                            && matches!(tab_viewer.on_close(tab), OnCloseResponse::Close))
-                        {
-                            all_tabs_are_closable = false;
-                        }
-                    }
-                    if all_tabs_are_closable {
+                TabRemoval::Node(_) => {
+                    let Some(TreeComponent::Node(path)) = source else {
+                        continue;
+                    };
+                    let close = self
+                        .dock_state
+                        .leaf_for_ui(path)
+                        .expect("resolved leaf")
+                        .tabs
+                        .iter_mut()
+                        .all(|tab| {
+                            tab_viewer.is_closeable(tab)
+                                && matches!(tab_viewer.on_close(tab), OnCloseResponse::Close)
+                        });
+                    if close {
                         self.dock_state.remove_leaf(path);
                     }
                 }
                 TabRemoval::Window(surface) => {
-                    let mut all_tabs_are_closable = true;
-                    for node in self.dock_state[surface].iter_mut() {
-                        for tab in node.iter_tabs_mut() {
-                            if !(tab_viewer.is_closeable(tab)
-                                && matches!(tab_viewer.on_close(tab), OnCloseResponse::Close))
-                            {
-                                all_tabs_are_closable = false;
-                            }
-                        }
+                    // No surfaces are allocated while this batch is removed.
+                    if !self.dock_state.is_window(surface) {
+                        continue;
                     }
-                    if all_tabs_are_closable {
+                    let close = self
+                        .dock_state
+                        .tree_for_ui(surface)
+                        .iter_mut()
+                        .flat_map(|node| node.iter_tabs_mut())
+                        .all(|tab| {
+                            tab_viewer.is_closeable(tab)
+                                && matches!(tab_viewer.on_close(tab), OnCloseResponse::Close)
+                        });
+                    if close {
                         self.dock_state.remove_surface(surface);
                     }
                 }
             }
         }
 
-        for path in std::mem::take(&mut self.to_detach).into_iter().rev() {
+        for source in std::mem::take(&mut self.to_detach).into_iter().rev() {
+            if !self.drag_source_valid(source, tab_viewer) {
+                continue;
+            }
+            let DragSource::Tab { path, .. } = source else {
+                continue;
+            };
             let mouse_pos = state.last_hover_pos.unwrap_or(Pos2::ZERO);
             if self.floats_on() {
                 let size = self.dock_state[path.node_path()]
                     .rect()
                     .map_or(Vec2::new(100., 150.), |rect| rect.size());
-                if let Some(id) = self.tab_identity(path, tab_viewer) {
-                    self.to_float.push(PendingFloat {
-                        source: DragSource::Tab { path, id },
-                        rect: Rect::from_min_size(mouse_pos, size),
-                        host: None,
-                    });
-                }
+                self.to_float.push(PendingFloat {
+                    source,
+                    rect: Rect::from_min_size(mouse_pos, size),
+                    host: None,
+                });
             } else {
                 self.dock_state.eject_tab(path, mouse_pos);
             }
@@ -191,10 +234,6 @@ impl<Tab> DockArea<'_, Tab> {
             }
         }
 
-        if let Some(focused) = self.new_focused {
-            self.dock_state.set_focused_node_and_surface(focused);
-        }
-
         if let Some(space) = &mut self.space {
             remove_empty_docks(self.dock_state, space.docks);
         }
@@ -206,6 +245,40 @@ impl<Tab> DockArea<'_, Tab> {
             state.tab_drag_cancelled = false;
         }
         state.store(ui.ctx(), self.id);
+    }
+
+    /// Removals follow a surviving leaf through promotion during this batch.
+    /// Drags instead require their original path, so a changed layout cancels them.
+    fn resolve_removal_source(
+        &mut self,
+        source: DragSource,
+        viewer: &mut impl TabViewer<Tab = Tab>,
+    ) -> Option<TreeComponent> {
+        let (surface, identity) = match source {
+            DragSource::Tab { path, id } => (path.surface, id.leaf),
+            DragSource::Group { path, id } => (path.surface, id),
+        };
+        let path = self
+            .dock_state
+            .iter_leaves()
+            .find(|(path, leaf)| path.surface == surface && leaf.drag_identity == identity)
+            .map(|(path, _)| path)?;
+        match source {
+            DragSource::Group { .. } => Some(TreeComponent::Node(path)),
+            DragSource::Tab { id, .. } => {
+                let leaf = self.dock_state.leaf_for_ui(path).ok()?;
+                let mut matches = leaf
+                    .tabs
+                    .iter_mut()
+                    .enumerate()
+                    .filter_map(|(index, tab)| (viewer.id(tab) == id.tab).then_some(index));
+                let index = matches.next()?;
+                if matches.next().is_some() {
+                    return None;
+                }
+                Some(TreeComponent::Tab((path, crate::TabIndex(index)).into()))
+            }
+        }
     }
 
     /// Reads what the leaves recorded during the last pass: the dragged tab and what it hovers.
@@ -663,7 +736,7 @@ impl<Tab> DockArea<'_, Tab> {
         let dock_allows = self
             .dock_rules(path.surface)
             .is_none_or(|rules| rules.windows);
-        let Node::Leaf(leaf) = &mut self.dock_state[path.node_path()] else {
+        let Node::Leaf(leaf) = self.dock_state.node_for_ui(path.node_path()).unwrap() else {
             unreachable!("tab drags can only come from leaf nodes")
         };
         dock_allows && tab_viewer.allowed_in_windows(&mut leaf.tabs[path.tab.0])
@@ -698,8 +771,15 @@ impl<Tab> DockArea<'_, Tab> {
                     .valid_surface_indices()
                     .iter()
                     .any(|&surface| {
-                        self.dock_state.is_window(surface)
-                            && window_surface::window_layer_id(surface) == top
+                        self.dock_state
+                            .get_window_state(surface)
+                            .is_some_and(|window| {
+                                window.runtime_identity != 0
+                                    && window_surface::window_layer_id(
+                                        self.id,
+                                        window.runtime_identity,
+                                    ) == top
+                            })
                     }))
     }
 
@@ -1251,7 +1331,7 @@ impl<Tab> DockArea<'_, Tab> {
         if self.dock_state[surface].is_empty() {
             return rect;
         }
-        self.dock_state[surface][NodeIndex::root()].set_rect(rect);
+        self.dock_state.tree_for_ui(surface)[NodeIndex::root()].set_rect(rect);
         rect
     }
 
@@ -1308,7 +1388,7 @@ impl<Tab> DockArea<'_, Tab> {
                 );
             }
             let child_rect = rect.intersect(child_rect).intersect(max_rect);
-            self.dock_state[path.surface][child].set_rect(child_rect);
+            self.dock_state.tree_for_ui(path.surface)[child].set_rect(child_rect);
         }
     }
 
@@ -1317,7 +1397,7 @@ impl<Tab> DockArea<'_, Tab> {
         let style = self.style.as_ref().unwrap();
         let pixels_per_point = ui.ctx().pixels_per_point();
         let half = style.separator.width * 0.5;
-        let Node::Grid(grid) = &mut self.dock_state[path.surface][path.node] else {
+        let Node::Grid(grid) = &mut self.dock_state.tree_for_ui(path.surface)[path.node] else {
             unreachable!("a grid node")
         };
         grid.fit_shares();
@@ -1354,7 +1434,7 @@ impl<Tab> DockArea<'_, Tab> {
             let (min_y, max_y) = span(grid.row_shares(), row, rows, rect.min.y, rect.height());
             let child_rect = Rect::from_min_max(pos2(min_x, min_y), pos2(max_x, max_y));
             let child_rect = rect.intersect(child_rect).intersect(max_rect);
-            self.dock_state[path.surface][child].set_rect(child_rect);
+            self.dock_state.tree_for_ui(path.surface)[child].set_rect(child_rect);
         }
     }
 
@@ -1367,7 +1447,7 @@ impl<Tab> DockArea<'_, Tab> {
         separator_of: SeparatorOf,
         tab_viewer: &mut impl TabViewer<Tab = Tab>,
     ) -> String {
-        let surface = &mut self.dock_state[path.surface];
+        let surface = self.dock_state.tree_for_ui(path.surface);
         let pair = match (&surface[path.node], separator_of) {
             (Node::Linear(linear), SeparatorOf::Linear(index)) => {
                 Some([linear.children()[index], linear.children()[index + 1]])
@@ -1415,22 +1495,24 @@ impl<Tab> DockArea<'_, Tab> {
         let painter = self.painter.0;
 
         // The separator stands after the share `index`, moving it and the next one.
-        let (horizontal, rect, shares, index) =
-            match (&mut self.dock_state[path.surface][path.node], separator_of) {
-                (Node::Linear(linear), SeparatorOf::Linear(index)) => (
-                    linear.dir == LinearDir::Horizontal,
-                    linear.rect,
-                    &mut linear.shares,
-                    index,
-                ),
-                (Node::Grid(grid), SeparatorOf::Column(index)) => {
-                    (true, grid.rect, &mut grid.col_shares, index)
-                }
-                (Node::Grid(grid), SeparatorOf::Row(index)) => {
-                    (false, grid.rect, &mut grid.row_shares, index)
-                }
-                _ => unreachable!("a separator of this container"),
-            };
+        let (horizontal, rect, shares, index) = match (
+            &mut self.dock_state.tree_for_ui(path.surface)[path.node],
+            separator_of,
+        ) {
+            (Node::Linear(linear), SeparatorOf::Linear(index)) => (
+                linear.dir == LinearDir::Horizontal,
+                linear.rect,
+                &mut linear.shares,
+                index,
+            ),
+            (Node::Grid(grid), SeparatorOf::Column(index)) => {
+                (true, grid.rect, &mut grid.col_shares, index)
+            }
+            (Node::Grid(grid), SeparatorOf::Row(index)) => {
+                (false, grid.rect, &mut grid.row_shares, index)
+            }
+            _ => unreachable!("a separator of this container"),
+        };
         let dim = |v: Vec2| if horizontal { v.x } else { v.y };
         let along = |r: Rect| {
             if horizontal {

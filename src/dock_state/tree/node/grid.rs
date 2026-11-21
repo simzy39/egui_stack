@@ -49,6 +49,7 @@ pub enum GridLayout {
 )]
 pub struct GridNode {
     /// The rectangle in which all children of this node are drawn.
+    #[cfg_attr(feature = "serde", serde(skip))]
     pub rect: Rect,
 
     /// How the number of columns is chosen.
@@ -98,7 +99,7 @@ impl Clone for GridNode {
 impl GridNode {
     pub(crate) fn ensure_drag_identity(&mut self) -> u64 {
         if self.drag_identity == 0 {
-            self.drag_identity = super::allocate_container_drag_identity();
+            self.drag_identity = crate::dock_state::identity::next();
         }
         self.drag_identity
     }

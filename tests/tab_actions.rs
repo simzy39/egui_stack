@@ -128,7 +128,9 @@ fn focus_tab_activates_and_focuses() {
 #[test]
 fn eject_tab_opens_a_window() {
     let mut dock_state = dock();
-    let window = dock_state.eject_tab(second(), Pos2::new(40.0, 50.0));
+    let window = dock_state
+        .eject_tab(second(), Pos2::new(40.0, 50.0))
+        .expect("valid tab ejects");
     assert!(!window.is_main());
     assert_eq!(dock_state[window].num_tabs(), 1);
     assert_eq!(titles(&dock_state), ["First", "Third", "Second"]);

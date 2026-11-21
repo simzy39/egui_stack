@@ -2,7 +2,7 @@ use egui::{Context, Id, Pos2, Rect};
 
 use super::{
     DraggedNode, DraggedTab,
-    drag_and_drop::{DragData, DragDropState, DragSource, HoverData},
+    drag_and_drop::{DragData, DragDropState, DragSource, HoverData, TabIdentity},
 };
 use crate::{NodePath, Style, SurfaceIndex, TabPath};
 
@@ -10,12 +10,12 @@ use crate::{NodePath, Style, SurfaceIndex, TabPath};
 pub(super) struct TabPress {
     pub widget: Id,
     pub path: TabPath,
-    pub tab_id: Id,
+    pub tab_id: TabIdentity,
 }
 
 impl TabPress {
     /// The initiating widget and logical tab must still match the retained press.
-    pub(super) fn matches(self, widget: Id, path: TabPath, tab_id: Id) -> bool {
+    pub(super) fn matches(self, widget: Id, path: TabPath, tab_id: TabIdentity) -> bool {
         self.widget == widget && self.path == path && self.tab_id == tab_id
     }
 }
@@ -146,7 +146,10 @@ mod retained_source_tests {
         let path = TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(0));
         let other = TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(1));
         let widget = Id::unique("original_tab_widget");
-        let id = Id::unique("original_tab");
+        let id = TabIdentity {
+            leaf: 1,
+            tab: Id::unique("original_tab"),
+        };
         let press = TabPress {
             widget,
             path,
@@ -155,7 +158,14 @@ mod retained_source_tests {
         assert!(press.matches(widget, path, id));
         assert!(!press.matches(Id::unique("other_widget"), path, id));
         assert!(!press.matches(widget, other, id));
-        assert!(!press.matches(widget, path, Id::unique("replacement_tab")));
+        assert!(!press.matches(
+            widget,
+            path,
+            TabIdentity {
+                leaf: 1,
+                tab: Id::unique("replacement_tab")
+            }
+        ));
     }
 
     #[test]
@@ -230,7 +240,10 @@ mod retained_source_tests {
                     crate::NodeIndex::root(),
                     crate::TabIndex(0),
                 ),
-                tab_id: Id::unique("tab"),
+                tab_id: TabIdentity {
+                    leaf: 1,
+                    tab: Id::unique("tab"),
+                },
             }),
             drag_carries_group: Some(false),
             ..State::default()

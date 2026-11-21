@@ -97,7 +97,8 @@ pub enum TabDestination {
     /// Move to an existing node with this insertion.
     Node(NodePath, TabInsert),
 
-    /// Move to an empty surface.
+    /// Move to a vacant surface slot or an existing tree containing no tabs.
+    /// Existing dock/window hosting and window geometry are preserved.
     EmptySurface(SurfaceIndex),
 }
 
@@ -825,6 +826,8 @@ impl<Tab> Tree<Tab> {
         let Some(parent) = self.parent(node) else {
             self.nodes.clear();
             self.focused_node = None;
+            self.collapsed = false;
+            self.collapsed_leaf_count = 0;
             return;
         };
 
@@ -867,6 +870,7 @@ impl<Tab> Tree<Tab> {
             self.give_way(parent);
         }
         self.trim();
+        self.refresh_collapsed();
     }
 
     /// Replaces the container `holder`, left with one child, by that child.
@@ -927,6 +931,8 @@ impl<Tab> Tree<Tab> {
             None => {
                 self.nodes.clear();
                 self.focused_node = None;
+                self.collapsed = false;
+                self.collapsed_leaf_count = 0;
                 return;
             }
             Some(root) if root != NodeIndex::root() => self.move_node(root, NodeIndex::root()),
@@ -939,6 +945,7 @@ impl<Tab> Tree<Tab> {
             }
         }
         self.trim();
+        self.refresh_collapsed();
         if self
             .focused_node
             .is_some_and(|f| self.nodes.get(f.0).is_none_or(|n| !n.is_leaf()))
@@ -958,7 +965,19 @@ impl<Tab> Tree<Tab> {
         }
         match self.nodes.get(index.0)? {
             Node::Empty => None,
-            Node::Leaf(_) => Some(index),
+            Node::Leaf(leaf) if leaf.tabs.is_empty() => {
+                self[index] = Node::Empty;
+                None
+            }
+            Node::Leaf(_) => {
+                // Loaded layouts can retain an obsolete selection. Normalize
+                // it at the persistence boundary before the tree is rendered.
+                let Node::Leaf(leaf) = &mut self[index] else {
+                    unreachable!()
+                };
+                leaf.active.0 = leaf.active.0.min(leaf.tabs.len() - 1);
+                Some(index)
+            }
             Node::Linear(linear) => {
                 let old: Vec<_> = linear
                     .children
@@ -1203,6 +1222,20 @@ impl<Tab> Tree<Tab> {
             self.set_collapsed(true);
             self.set_collapsed_leaf_count(count);
         }
+    }
+
+    /// Rebuild derived collapse metadata after containers are removed or joined.
+    fn refresh_collapsed(&mut self) {
+        let order: Vec<_> = self.breadth_first_index_iter().collect();
+        for index in order.into_iter().rev() {
+            if self[index].is_parent() {
+                let collapsed = self.update_collapsed_leaf_count(index);
+                self[index].set_collapsed(collapsed);
+            }
+        }
+        (self.collapsed, self.collapsed_leaf_count) = self.root_node().map_or((false, 0), |root| {
+            (root.is_collapsed(), root.collapsed_leaf_count())
+        });
     }
 
     /// Recounts the collapsed leaves of the container `index` from its children; returns

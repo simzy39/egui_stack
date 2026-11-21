@@ -1736,7 +1736,10 @@ mod viewport_lifecycle_tests {
         DragSession::new(
             DragSource::Tab {
                 path,
-                id: egui::Id::unique("tab"),
+                id: crate::widgets::dock_area::drag_and_drop::TabIdentity {
+                    leaf: 1,
+                    tab: egui::Id::unique("tab"),
+                },
             },
             Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(100.0, 100.0)),
             source,
@@ -1795,8 +1798,10 @@ mod viewport_lifecycle_tests {
     #[test]
     fn closing_source_viewport_ends_drag_session() {
         let source = ViewportId::from_hash_of("source");
-        let mut floating = Floating::default();
-        floating.session = Some(session(source));
+        let mut floating = Floating {
+            session: Some(session(source)),
+            ..Default::default()
+        };
         floating.viewport_closed(source);
         assert!(floating.session.is_none());
     }
@@ -1909,8 +1914,10 @@ mod viewport_lifecycle_tests {
     fn closing_unrelated_viewport_preserves_drag() {
         let source = ViewportId::from_hash_of("source");
         let unrelated = ViewportId::from_hash_of("unrelated");
-        let mut floating = Floating::default();
-        floating.session = Some(session(source));
+        let mut floating = Floating {
+            session: Some(session(source)),
+            ..Default::default()
+        };
         floating.viewport_closed(unrelated);
         let active = floating.session.as_ref().unwrap();
         assert!(!active.cancelled);

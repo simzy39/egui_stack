@@ -5,6 +5,9 @@ use egui::{Pos2, Rect, Vec2};
 use crate::{TabViewer, tab_viewer::OnCloseResponse};
 
 mod error;
+pub(crate) mod identity;
+#[cfg(test)]
+mod integrity_tests;
 pub use error::{Error, Result};
 
 /// Wrapper around indices to the collection of surfaces inside a [`DockState`].
@@ -29,12 +32,29 @@ use crate::{
     Tree,
 };
 
-/// A destination that has passed structural validation. The insertion index is
-/// resolved against the pre-move tree, so the commit phase never clamps a stale
-/// destination or revalidates against an already detached source.
-struct PreparedDestination {
-    destination: TabDestination,
-    insertion: Option<usize>,
+/// A destination resolved against the model before detaching anything.
+/// Numeric positions are converted to post-removal insertion indices here.
+enum PreparedDestination {
+    Window(Rect),
+    NewDock,
+    Split(NodePath, Split),
+    Insert(NodePath, usize),
+    EmptySurface(SurfaceIndex),
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum MoveSource {
+    Tab(TabPath),
+    Group(NodePath),
+}
+
+impl MoveSource {
+    fn node_path(self) -> NodePath {
+        match self {
+            Self::Tab(path) => path.node_path(),
+            Self::Group(path) => path,
+        }
+    }
 }
 
 /// The heart of `egui_stack`.
@@ -252,14 +272,7 @@ impl<Tab> DockState<Tab> {
         self.surfaces.get(index.0)?;
         let identity = &mut self.surfaces[index.0].identity;
         if *identity == 0 {
-            static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
-            *identity = NEXT
-                .try_update(
-                    std::sync::atomic::Ordering::Relaxed,
-                    std::sync::atomic::Ordering::Relaxed,
-                    |next| (next != 0).then(|| next.checked_add(1)).flatten(),
-                )
-                .unwrap_or_else(|_| panic!("surface identity exhausted"));
+            *identity = identity::next();
         }
         Some(*identity)
     }
@@ -357,14 +370,21 @@ impl<Tab> DockState<Tab> {
     /// Returns the removed surface or `None` if it didn't exist.
     ///
     /// Returns `None` for the main surface, a vacant slot, or an invalid index.
-    /// Repeated removals are idempotent and cannot remove a later surface that
-    /// happens to reuse the same slot.
+    /// Indices are positions, not durable handles: do not retain this index
+    /// after removal, because a new surface can reuse the slot.
     pub fn remove_surface(&mut self, surface_index: SurfaceIndex) -> Option<Surface<Tab>> {
         if surface_index.is_main() || !self.is_surface_valid(surface_index) {
             return None;
         }
         if self.focused_surface == Some(surface_index) {
-            self.focused_surface = Some(SurfaceIndex::main());
+            let main = self.main_surface();
+            let leaf = main
+                .focused_leaf()
+                .or_else(|| main.iter().position(Node::is_leaf).map(NodeIndex));
+            self.focused_surface = leaf.map(|_| SurfaceIndex::main());
+            if let Some(leaf) = leaf {
+                self.main_surface_mut().set_focused_node(leaf);
+            }
         }
         self.invalidate_surface_identity(surface_index);
         if surface_index.0 == self.surfaces.len() - 1 {
@@ -424,6 +444,33 @@ impl<Tab> DockState<Tab> {
             .nodes[path.node.0])
     }
 
+    /// Renderer access to layout, selection, and tab content. Unlike public raw
+    /// access, it must not replace nodes or change membership. Structural edits
+    /// go through DockState transactions and retire the surface snapshot.
+    pub(crate) fn tree_for_ui(&mut self, surface: SurfaceIndex) -> &mut Tree<Tab> {
+        self.surfaces[surface.0]
+            .surface
+            .node_tree_mut()
+            .expect("rendered surface tree")
+    }
+
+    pub(crate) fn leaf_for_ui(&mut self, path: NodePath) -> Result<&mut LeafNode<Tab>> {
+        self.leaf(path)?;
+        Ok(self
+            .node_for_ui(path)?
+            .get_leaf_mut()
+            .expect("validated leaf"))
+    }
+
+    pub(crate) fn node_for_ui(&mut self, path: NodePath) -> Result<&mut Node<Tab>> {
+        self.node(path)?;
+        Ok(&mut self.surfaces[path.surface.0]
+            .surface
+            .node_tree_mut()
+            .expect("validated surface tree")
+            .nodes[path.node.0])
+    }
+
     /// Immutably borrows a leaf node at the given `path`.
     ///
     /// Returns `Err` if the `path` is invalid or the node at the path is not a leaf.
@@ -456,56 +503,45 @@ impl<Tab> DockState<Tab> {
 
     /// Whether a destination can accept a move without clamping a stale tab index.
     pub(crate) fn valid_move_destination(&self, destination: &TabDestination) -> bool {
-        match *destination {
-            TabDestination::Node(path, TabInsert::Split(_)) => {
-                self.node(path).is_ok_and(|node| !node.is_empty())
-            }
-            TabDestination::Node(path, TabInsert::Insert(index)) => {
-                self.leaf(path).is_ok_and(|leaf| index.0 <= leaf.tabs.len())
-            }
-            TabDestination::Node(path, TabInsert::Append) => self.leaf(path).is_ok(),
-            TabDestination::EmptySurface(surface) => {
-                self.get_surface(surface).is_some_and(Surface::is_empty)
-            }
-            TabDestination::Window(rect) => {
-                rect.min.x.is_finite()
-                    && rect.min.y.is_finite()
-                    && rect.max.x.is_finite()
-                    && rect.max.y.is_finite()
-                    && rect.width() > 0.0
-                    && rect.height() > 0.0
-            }
-        }
+        self.prepare_destination(destination.clone(), None)
+            .is_some()
     }
 
-    /// Resolve the entire destination before removing a source tab or leaf.
-    /// The returned plan is consumed immediately; it must not survive an
-    /// intervening mutation of the dock tree.
+    /// Resolve the destination before mutation. The plan is consumed immediately,
+    /// under the same exclusive borrow of the model.
     fn prepare_destination(
         &self,
         destination: TabDestination,
         source_tab: Option<TabPath>,
     ) -> Option<PreparedDestination> {
-        if !self.valid_move_destination(&destination) {
-            return None;
-        }
-        let insertion = match &destination {
-            TabDestination::Node(path, TabInsert::Insert(index)) => {
+        match destination {
+            TabDestination::Window(rect) => {
+                window_state::valid_rect(rect).then_some(PreparedDestination::Window(rect))
+            }
+            TabDestination::Node(path, TabInsert::Split(split)) => self
+                .node(path)
+                .ok()
+                .filter(|node| !node.is_empty())
+                .map(|_| PreparedDestination::Split(path, split)),
+            TabDestination::Node(path, insert) => {
+                let leaf = self.leaf(path).ok()?;
+                let index = match insert {
+                    TabInsert::Insert(index) if index.0 <= leaf.tabs.len() => index.0,
+                    TabInsert::Append => leaf.tabs.len(),
+                    _ => return None,
+                };
                 let preceding_source = source_tab
-                    .is_some_and(|source| source.node_path() == *path && source.tab.0 < index.0);
-                Some(index.0 - usize::from(preceding_source))
+                    .is_some_and(|source| source.node_path() == path && source.tab.0 < index);
+                Some(PreparedDestination::Insert(
+                    path,
+                    index - usize::from(preceding_source),
+                ))
             }
-            TabDestination::Node(path, TabInsert::Append) => {
-                let count = self.leaf(*path).ok()?.tabs.len();
-                let same_leaf = source_tab.is_some_and(|source| source.node_path() == *path);
-                Some(count - usize::from(same_leaf))
-            }
-            _ => None,
-        };
-        Some(PreparedDestination {
-            destination,
-            insertion,
-        })
+            TabDestination::EmptySurface(surface) => self
+                .get_surface(surface)
+                .filter(|surface| surface.node_tree().is_none_or(|tree| tree.num_tabs() == 0))
+                .map(|_| PreparedDestination::EmptySurface(surface)),
+        }
     }
 
     /// Moves a whole leaf, all its tabs in their order, as a tab is moved: into another leaf's
@@ -528,73 +564,109 @@ impl<Tab> DockState<Tab> {
     /// assert_eq!(leaf.active, TabIndex(3));
     /// ```
     pub fn move_node(&mut self, src: NodePath, dst: impl Into<TabDestination>) -> bool {
-        let dst = dst.into();
-        // Preflight source and destination before touching either tree.
-        let Ok(leaf) = self.leaf(src) else {
-            return false;
-        };
-        if leaf.tabs.is_empty() || matches!(dst, TabDestination::Node(d, _) if d == src) {
+        let destination = dst.into();
+        if !self.valid_move_source(MoveSource::Group(src))
+            || matches!(destination, TabDestination::Node(path, _) if path == src)
+        {
             return false;
         }
-        let Some(plan) = self.prepare_destination(dst, None) else {
+        let Some(plan) = self.prepare_destination(destination, None) else {
             return false;
         };
-        let PreparedDestination {
-            destination: dst,
-            insertion,
-        } = plan;
-        let leaf = self.leaf_mut(src).expect("preflighted source leaf");
-        let active = leaf.active.0.min(leaf.tabs.len() - 1);
-        let tabs = std::mem::take(&mut leaf.tabs);
-        // Splitting the root relocates its old contents into a child. If
-        // that root contains the emptied source, cleanup must follow it.
-        let mut cleanup_source = src;
-        match dst {
-            TabDestination::Window(rect) => {
-                let surface = self.add_window(tabs);
-                if let Ok(leaf) = self.leaf_mut(NodePath::new(surface, NodeIndex::root())) {
-                    leaf.active = TabIndex(active);
-                }
-                let from_dock = !self.is_window(src.surface);
-                let state = self.get_window_state_mut(surface).unwrap();
-                state.set_position(rect.min);
-                if from_dock {
-                    state.set_size(rect.size() * 0.8);
-                } else {
-                    state.set_size(rect.size());
-                }
-            }
-            TabDestination::Node(d, insert) => match insert {
-                TabInsert::Split(split) => {
-                    let mut node = Node::leaf_with(tabs);
-                    if let Some(leaf) = node.get_leaf_mut() {
-                        leaf.active = TabIndex(active);
-                    }
-                    let [old_node, _new_node] = self[d.surface].split(d.node, split, 0.5, node);
-                    if d == cleanup_source {
-                        cleanup_source.node = old_node;
-                    }
-                }
-                TabInsert::Insert(_) | TabInsert::Append => {
-                    let leaf = self.leaf_mut(d).expect("validated destination leaf");
-                    let at = insertion.expect("preflighted group insertion");
-                    leaf.tabs.splice(at..at, tabs);
-                    leaf.active = TabIndex(at + active);
-                }
-            },
-            TabDestination::EmptySurface(surface) => {
-                let mut tree = Tree::new(tabs);
-                if let Some(leaf) = tree.root_node_mut().and_then(Node::get_leaf_mut) {
-                    leaf.active = TabIndex(active);
-                }
-                // An empty slot has no tree and cannot be accessed through IndexMut.
-                // Destination validity was checked before the source was detached.
-                self.invalidate_surface_identity(surface);
-                self.surfaces[surface.0] = SurfaceSlot::new(Surface::Main(tree));
-            }
-        }
-        self.cleanup_moved_source(cleanup_source);
+        self.commit_move(MoveSource::Group(src), plan);
         true
+    }
+
+    pub(crate) fn valid_move_source(&self, source: MoveSource) -> bool {
+        self.leaf(source.node_path())
+            .is_ok_and(|leaf| match source {
+                MoveSource::Tab(path) => path.tab.0 < leaf.tabs.len(),
+                MoveSource::Group(_) => !leaf.tabs.is_empty() && leaf.active.0 < leaf.tabs.len(),
+            })
+    }
+
+    /// Allocate the dock as part of the commit, after validating the source.
+    pub(crate) fn detach_to_dock(&mut self, source: MoveSource) -> Option<SurfaceIndex> {
+        self.valid_move_source(source)
+            .then(|| self.commit_move(source, PreparedDestination::NewDock))
+    }
+
+    /// Commit a validated move. Insertion precedes source cleanup so destination
+    /// indices cannot be invalidated by collapsing an emptied source's ancestors.
+    /// The commit makes no recoverable decisions and never calls application code.
+    fn commit_move(
+        &mut self,
+        source: MoveSource,
+        destination: PreparedDestination,
+    ) -> SurfaceIndex {
+        let mut cleanup = source.node_path();
+        let from_dock = !self.is_window(cleanup.surface);
+        let leaf = self.leaf_mut(cleanup).expect("preflighted source leaf");
+        let (tabs, active) = match source {
+            MoveSource::Tab(path) => (
+                vec![leaf.remove_tab(path.tab).expect("preflighted source tab")],
+                TabIndex(0),
+            ),
+            MoveSource::Group(_) => {
+                let active = leaf.active;
+                leaf.active = TabIndex(0);
+                (std::mem::take(&mut leaf.tabs), active)
+            }
+        };
+        let target = match destination {
+            PreparedDestination::NewDock => {
+                let mut tree = Tree::new(tabs);
+                tree.leaf_mut(NodeIndex::root())
+                    .expect("new dock leaf")
+                    .active = active;
+                NodePath::new(self.add_docked_surface(tree), NodeIndex::root())
+            }
+            PreparedDestination::Window(rect) => {
+                let surface = self.add_window(tabs);
+                self.leaf_mut(NodePath::new(surface, NodeIndex::root()))
+                    .expect("new window leaf")
+                    .active = active;
+                let window = self
+                    .get_window_state_mut(surface)
+                    .expect("new window state");
+                window.set_position(rect.min);
+                window.set_size(rect.size() * if from_dock { 0.8 } else { 1.0 });
+                NodePath::new(surface, NodeIndex::root())
+            }
+            PreparedDestination::Split(path, split) => {
+                let mut node = LeafNode::new(tabs);
+                node.active = active;
+                let [old, new] = self[path.surface].split(path.node, split, 0.5, Node::Leaf(node));
+                if path == cleanup {
+                    cleanup.node = old;
+                }
+                NodePath::new(path.surface, new)
+            }
+            PreparedDestination::Insert(path, index) => {
+                let leaf = self.leaf_mut(path).expect("preflighted destination leaf");
+                leaf.tabs.splice(index..index, tabs);
+                leaf.active = TabIndex(index + active.0);
+                path
+            }
+            PreparedDestination::EmptySurface(surface) => {
+                let mut tree = Tree::new(tabs);
+                tree.leaf_mut(NodeIndex::root())
+                    .expect("new root leaf")
+                    .active = active;
+                let slot = &mut self.surfaces[surface.0];
+                slot.identity = 0;
+                match &mut slot.surface {
+                    Surface::Empty => slot.surface = Surface::Main(tree),
+                    Surface::Main(existing) | Surface::Window(existing, _) => *existing = tree,
+                }
+                NodePath::new(surface, NodeIndex::root())
+            }
+        };
+        // Tree cleanup follows this focus if a destination is promoted to the root.
+        self.set_focused_node_and_surface(target);
+        self.cleanup_moved_source(cleanup);
+        self.focused_surface = Some(target.surface);
+        target.surface
     }
 
     /// Remove a source leaf emptied by a completed move, then close its empty
@@ -632,59 +704,16 @@ impl<Tab> DockState<Tab> {
 
     /// Moves a tab to another leaf, a split, an empty surface, or a window.
     /// Returns false without changing the tree when the move is invalid or a no-op.
-    pub fn move_tab(&mut self, src: TabPath, dst_tab: impl Into<TabDestination>) -> bool {
-        let destination = dst_tab.into();
-        if self
-            .leaf(src.node_path())
-            .map_or(true, |leaf| src.tab.0 >= leaf.tabs.len())
+    pub fn move_tab(&mut self, src: TabPath, dst: impl Into<TabDestination>) -> bool {
+        let destination = dst.into();
+        if !self.valid_move_source(MoveSource::Tab(src)) || self.tab_move_is_noop(src, &destination)
         {
-            return false;
-        }
-        if self.tab_move_is_noop(src, &destination) {
             return false;
         }
         let Some(plan) = self.prepare_destination(destination, Some(src)) else {
             return false;
         };
-        let PreparedDestination {
-            destination,
-            insertion,
-        } = plan;
-        // Splitting the root relocates its old leaf to a newly allocated node.
-        // Track that relocation so cleanup never targets the new container.
-        let mut cleanup_source = src.node_path();
-        match destination {
-            TabDestination::Window(position) => {
-                // The window destination and source tab were already checked
-                // during preflight. Do not run a second, divergent move path.
-                self.commit_detach_tab(src, position);
-                return true;
-            }
-            TabDestination::Node(dst, dst_tab) => {
-                // Call `Node::remove_tab` to avoid auto remove of the node by `Tree::remove_tab` from Tree.
-                let tab = self[src.node_path()].remove_tab(src.tab).unwrap();
-                match dst_tab {
-                    TabInsert::Split(split) => {
-                        let [old_node, _new_node] =
-                            self[dst.surface].split(dst.node, split, 0.5, Node::leaf(tab));
-                        if dst == cleanup_source {
-                            cleanup_source.node = old_node;
-                        }
-                    }
-                    TabInsert::Insert(_) | TabInsert::Append => {
-                        let at = insertion.expect("preflighted tab insertion");
-                        self[dst.surface][dst.node].insert_tab(TabIndex(at), tab);
-                    }
-                }
-            }
-            TabDestination::EmptySurface(dst_surface) => {
-                let tab = self[src.node_path()].remove_tab(src.tab).unwrap();
-                self.invalidate_surface_identity(dst_surface);
-                self.surfaces[dst_surface.0] =
-                    SurfaceSlot::new(Surface::Main(Tree::new(vec![tab])));
-            }
-        }
-        self.cleanup_moved_source(cleanup_source);
+        self.commit_move(MoveSource::Tab(src), plan);
         true
     }
 
@@ -790,31 +819,8 @@ impl<Tab> DockState<Tab> {
     /// Returns the new window's surface index, or `None` if the source tab is invalid.
     pub fn detach_tab(&mut self, src: TabPath, window_rect: Rect) -> Option<SurfaceIndex> {
         self.leaf(src.node_path()).ok()?.tabs.get(src.tab.0)?;
-        self.prepare_destination(TabDestination::Window(window_rect), Some(src))?;
-        Some(self.commit_detach_tab(src, window_rect))
-    }
-
-    /// Commit a fully preflighted tab detachment. No fallible lookups occur
-    /// after the source tab is removed.
-    fn commit_detach_tab(&mut self, src: TabPath, window_rect: Rect) -> SurfaceIndex {
-        let tab = self[src.node_path()]
-            .remove_tab(src.tab)
-            .expect("preflighted source tab");
-        let surface_index = self.add_window(vec![tab]);
-
-        // Set the window size and position to match `window_rect`.
-        let from_dock = !self.is_window(src.surface);
-        let state = self.get_window_state_mut(surface_index).unwrap();
-        state.set_position(window_rect.min);
-        if from_dock {
-            state.set_size(window_rect.size() * 0.8);
-        } else {
-            state.set_size(window_rect.size());
-        }
-
-        // Clean up any empty leaves and surfaces which may be left behind from the detachment.
-        self.cleanup_moved_source(src.node_path());
-        surface_index
+        let plan = self.prepare_destination(TabDestination::Window(window_rect), Some(src))?;
+        Some(self.commit_move(MoveSource::Tab(src), plan))
     }
 
     /// Returns the currently focused leaf if there is one.
@@ -1347,6 +1353,7 @@ mod test {
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
         let empty_surface = dock.add_window(vec![]);
         let empty = NodePath::new(empty_surface, NodeIndex::root());
+        *dock.node_mut(empty).unwrap() = Node::Empty;
         let source = TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(0));
         assert!(!dock.move_tab(
             source,
@@ -1357,7 +1364,7 @@ mod test {
             TabDestination::Node(empty, TabInsert::Split(crate::Split::Right)),
         ));
         assert_eq!(dock.leaf(root).unwrap().tabs, ["first", "second"]);
-        assert!(dock.get_surface(empty_surface).unwrap().is_empty());
+        assert!(dock.node(empty).unwrap().is_empty());
     }
 
     #[test]
@@ -1826,7 +1833,7 @@ mod test {
         let mut dock = DockState::new(vec!["main"]);
         let first = dock.add_window(vec!["first"]);
         let second = dock.add_window(vec!["second"]);
-        assert_eq!(dock.remove_surface(SurfaceIndex::main()).is_none(), true);
+        assert!(dock.remove_surface(SurfaceIndex::main()).is_none());
         assert!(dock.remove_surface(first).is_some());
         assert!(dock.remove_surface(first).is_none());
         assert_eq!(dock[second].num_tabs(), 1);
@@ -2147,6 +2154,7 @@ mod test {
         let destination = NodePath::new(SurfaceIndex::main(), right);
         dock.leaf_mut(source).unwrap().active = TabIndex(1);
         assert!(dock.move_node(source, TabDestination::Node(destination, TabInsert::Append)));
+        let destination = dock.find_tab(&"c").unwrap().node_path();
         let leaf = dock.leaf(destination).unwrap();
         assert_eq!(leaf.tabs, ["c", "a", "b"]);
         assert_eq!(leaf.active, TabIndex(2));

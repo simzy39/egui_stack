@@ -3,13 +3,15 @@ use egui::{Id, Pos2, Rect, Vec2};
 /// The state of a [`Surface::Window`](crate::Surface::Window).
 ///
 /// Doubles as a handle for the surface, allowing the user to set its size and position.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 #[cfg_attr(
     feature = "serde",
     derive(serde::Deserialize, serde::Serialize),
     serde(default)
 )]
 pub struct WindowState {
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub(crate) runtime_identity: u64,
     /// The [`Rect`] that this window was last taking up.
     screen_rect: Option<Rect>,
 
@@ -36,6 +38,7 @@ pub struct WindowState {
 impl Default for WindowState {
     fn default() -> Self {
         Self {
+            runtime_identity: 0,
             screen_rect: None,
             dragged: false,
             next_position: None,
@@ -47,7 +50,40 @@ impl Default for WindowState {
     }
 }
 
+impl Clone for WindowState {
+    fn clone(&self) -> Self {
+        Self {
+            runtime_identity: 0,
+            screen_rect: self.screen_rect,
+            dragged: false,
+            next_position: self
+                .next_position
+                .or_else(|| self.shown_rect().map(|rect| rect.min)),
+            next_size: self
+                .next_size
+                .or_else(|| self.shown_rect().map(|rect| rect.size())),
+            expanded_height: self.expanded_height,
+            new: true,
+            minimized: self.minimized,
+        }
+    }
+}
+
 impl WindowState {
+    pub(crate) fn ensure_identity(&mut self) -> u64 {
+        if self.runtime_identity == 0 {
+            self.runtime_identity = crate::dock_state::identity::next();
+            // A fresh egui window has no retained geometry, including after
+            // loading a saved state into a new context.
+            if let Some(rect) = self.shown_rect() {
+                self.next_position.get_or_insert(rect.min);
+                self.next_size.get_or_insert(rect.size());
+            }
+            self.new = true;
+            self.dragged = false;
+        }
+        self.runtime_identity
+    }
     /// Create a default window state.
     pub(crate) fn new() -> Self {
         Self::default()
@@ -169,4 +205,8 @@ impl WindowState {
         self.new = false;
         (window_constructor, restored_height)
     }
+}
+/// Geometry accepted by docking transactions, including finite extents.
+pub(crate) fn valid_rect(rect: egui::Rect) -> bool {
+    rect.is_finite() && rect.size().is_finite() && rect.width() > 0.0 && rect.height() > 0.0
 }

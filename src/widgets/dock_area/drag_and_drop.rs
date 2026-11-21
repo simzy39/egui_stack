@@ -66,8 +66,29 @@ pub(crate) struct DragData {
 /// Retained sources identify the original tab or leaf, not merely its tree slot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DragSource {
-    Tab { path: TabPath, id: Id },
+    Tab { path: TabPath, id: TabIdentity },
     Group { path: NodePath, id: u64 },
+}
+
+/// A logical tab belongs to a particular runtime leaf. Rebuilding or cloning
+/// that leaf retires its gestures even if the application reuses the tab ID.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct TabIdentity {
+    pub(crate) leaf: u64,
+    pub(crate) tab: Id,
+}
+
+#[cfg(test)]
+impl TabIdentity {
+    pub(crate) fn capture<Tab>(state: &mut crate::DockState<Tab>, path: TabPath, tab: Id) -> Self {
+        Self {
+            leaf: state
+                .leaf_mut(path.node_path())
+                .unwrap()
+                .ensure_drag_identity(),
+            tab,
+        }
+    }
 }
 
 impl DragSource {

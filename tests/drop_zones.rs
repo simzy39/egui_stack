@@ -205,10 +205,14 @@ fn a_window_takes_drops_on_its_zones() {
         .dock_state
         .find_tab(&"Third".to_owned())
         .unwrap();
-    let window = harness.state_mut().dock_state.detach_tab(
-        third,
-        Rect::from_min_size(pos2(250.0, 120.0), vec2(300.0, 220.0)),
-    );
+    let window = harness
+        .state_mut()
+        .dock_state
+        .detach_tab(
+            third,
+            Rect::from_min_size(pos2(250.0, 120.0), vec2(300.0, 220.0)),
+        )
+        .expect("valid floating window geometry");
     harness.run();
     let leaf = |h: &Harness<'_, App>| {
         h.state().dock_state[window][NodeIndex::root()]

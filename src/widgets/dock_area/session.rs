@@ -212,7 +212,10 @@ mod recency_tests {
         DragSession::new(
             DragSource::Tab {
                 path: TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(0)),
-                id: Id::unique("tab"),
+                id: crate::widgets::dock_area::drag_and_drop::TabIdentity {
+                    leaf: 1,
+                    tab: Id::unique("tab"),
+                },
             },
             Rect::NOTHING,
             ViewportId::from_hash_of("source"),

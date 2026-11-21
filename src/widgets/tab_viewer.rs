@@ -10,12 +10,14 @@ pub trait TabViewer {
 
     /// Unique, stable ID for this tab.
     ///
-    /// The ID must remain unchanged during a drag, and must distinguish different tabs.
-    /// It may be requested for inactive tabs as well as the active tab.
+    /// The ID must remain unchanged for the tab's lifetime and distinguish tabs
+    /// throughout a DockSpace, including inactive tabs and floating windows.
+    /// Identity queries must not modify the tab's logical identity. Give a new
+    /// tab a new ID instead of recycling one from a tab that was closed.
     ///
-    /// Assuming `Tab` implements `Hash`, you can simply do `Id::new(tab)`.
+    /// Assuming `Tab` implements `Hash`, you can simply do `Id::unique(tab)`.
     /// If that is not possible, but tab names are guaranteed to be unique,
-    /// one could also implement this as `Id::new(self.title(tab).text())`.
+    /// one could also implement this as `Id::unique(self.title(tab).text())`.
     fn id(&mut self, tab: &mut Self::Tab) -> Id;
 
     /// The title to be displayed in the tab bar.

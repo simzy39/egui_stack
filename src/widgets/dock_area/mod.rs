@@ -69,7 +69,7 @@ pub struct DockArea<'tree, Tab> {
     space: Option<SpaceDock<'tree, Tab>>,
 
     to_remove: Vec<TabRemoval>,
-    to_detach: Vec<TabPath>,
+    to_detach: Vec<DragSource>,
     /// Groups moved by their Move group menu, applied once the area is drawn.
     to_move_group: Vec<(DragSource, crate::TabDestination)>,
     /// Tabs and groups moved out to a new float, applied once the area is drawn: where, and
@@ -203,15 +203,11 @@ impl DockArea<'_, ()> {
         if body.source.is_none() {
             return false;
         }
+        let pass = ui.ctx().cumulative_pass_nr();
         if response.is_pointer_button_down_on() && ui.input(|i| i.pointer.primary_pressed()) {
             ui.data_mut(|d| {
                 let key = BodyLeaf::press_id(body.dock_area);
-                BodyLeaf::retain_first_request(
-                    d,
-                    key,
-                    ui.ctx().cumulative_pass_nr(),
-                    (body.source, response.id),
-                );
+                BodyLeaf::retain_first_request(d, key, pass, (body.source, response.id));
             });
         }
         let dragged = response.dragged() && ui.input(|i| i.pointer.is_decidedly_dragging());
@@ -219,12 +215,7 @@ impl DockArea<'_, ()> {
             ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::Grabbing);
             ui.data_mut(|d| {
                 let key = BodyLeaf::request_id(body.dock_area);
-                BodyLeaf::retain_first_request(
-                    d,
-                    key,
-                    ui.ctx().cumulative_pass_nr(),
-                    (body.source, response.id),
-                );
+                BodyLeaf::retain_first_request(d, key, pass, (body.source, response.id));
             });
         } else if response.hovered() && ui.ctx().dragged_id().is_none() {
             ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::Grab);

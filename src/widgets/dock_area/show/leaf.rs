@@ -188,10 +188,11 @@ impl<Tab> DockArea<'_, Tab> {
         }
 
         // Body handles report their press separately from drag activation.
+        let pass = ui.ctx().cumulative_pass_nr();
         let press_request = BodyLeaf::press_id(self.id);
-        if let Some((source, handle_id)) = ui.data_mut(|d| {
-            BodyLeaf::take_request_for_leaf(d, press_request, ui.ctx().cumulative_pass_nr(), path)
-        }) && self.draggable_tabs
+        if let Some((source, handle_id)) =
+            ui.data_mut(|d| BodyLeaf::take_request_for_leaf(d, press_request, pass, path))
+            && self.draggable_tabs
             && ui.input(|i| i.pointer.primary_down())
             && state.group_press.is_none()
             && state.tab_press.is_none()
@@ -212,9 +213,9 @@ impl<Tab> DockArea<'_, Tab> {
         }
         // A handle of the body (`DockArea::drag_group_by`) asked to drag the group.
         let request = BodyLeaf::request_id(self.id);
-        if let Some((source, handle_id)) = ui.data_mut(|d| {
-            BodyLeaf::take_request_for_leaf(d, request, ui.ctx().cumulative_pass_nr(), path)
-        }) && self.draggable_tabs
+        if let Some((source, handle_id)) =
+            ui.data_mut(|d| BodyLeaf::take_request_for_leaf(d, request, pass, path))
+            && self.draggable_tabs
         {
             // A later drag request cannot target a replacement leaf or a
             // different handle, even when the node path has been reused.
@@ -234,7 +235,10 @@ impl<Tab> DockArea<'_, Tab> {
             self.cycle_tab_by_keyboard(ui, path, rect);
         }
 
-        let tabs = self.dock_state[path]
+        let tabs = self
+            .dock_state
+            .node_for_ui(path)
+            .unwrap()
             .tabs_mut()
             .expect("This node must be a leaf here");
         for (tab_index, tab) in tabs.iter_mut().enumerate() {
@@ -268,7 +272,7 @@ impl<Tab> DockArea<'_, Tab> {
         } else {
             return;
         };
-        let Ok(leaf) = self.dock_state.leaf_mut(path) else {
+        let Ok(leaf) = self.dock_state.leaf_for_ui(path) else {
             return;
         };
         let len = leaf.tabs.len();
@@ -337,7 +341,9 @@ impl<Tab> DockArea<'_, Tab> {
             Stroke::NONE,
         ));
         if btn_response.clicked() {
-            self.dock_state[path]
+            self.dock_state
+                .node_for_ui(path)
+                .unwrap()
                 .get_leaf_mut()
                 .expect("This node must be a leaf")
                 .tab_bar_hidden = false;
@@ -356,7 +362,9 @@ impl<Tab> DockArea<'_, Tab> {
             );
             drag_response.context_menu(|ui| {
                 if ui.add(show_button).clicked() {
-                    self.dock_state[path]
+                    self.dock_state
+                        .node_for_ui(path)
+                        .unwrap()
                         .get_leaf_mut()
                         .expect("This node must be a leaf")
                         .tab_bar_hidden = false;
@@ -510,7 +518,7 @@ impl<Tab> DockArea<'_, Tab> {
                 );
             let leaf = self
                 .dock_state
-                .leaf_mut(path)
+                .leaf_for_ui(path)
                 .expect("This node must be a leaf");
 
             let tabbar_inner_rect = Rect::from_min_size(
@@ -628,17 +636,21 @@ impl<Tab> DockArea<'_, Tab> {
                 // Current leaf contains non-closable tabs.
                 let disabled = self
                     .dock_state
-                    .leaf_mut(path)
+                    .leaf_for_ui(path)
                     .map(|leaf| !leaf.tabs.iter_mut().all(|tab| tab_viewer.is_closeable(tab)))
                     .expect("This node must be a leaf");
 
                 // Current window contains non-closable tabs.
                 let close_window_disabled = disabled
-                    || !self.dock_state[path.surface].iter_mut().all(|node| {
-                        node.get_leaf_mut().is_none_or(|leaf| {
-                            leaf.tabs.iter_mut().all(|tab| tab_viewer.is_closeable(tab))
-                        })
-                    });
+                    || !self
+                        .dock_state
+                        .tree_for_ui(path.surface)
+                        .iter_mut()
+                        .all(|node| {
+                            node.get_leaf_mut().is_none_or(|leaf| {
+                                leaf.tabs.iter_mut().all(|tab| tab_viewer.is_closeable(tab))
+                            })
+                        });
 
                 self.tab_close_all(
                     ui,
@@ -767,7 +779,10 @@ impl<Tab> DockArea<'_, Tab> {
         let mut roved = false;
         for tab_index in 0..tabs_len {
             let tab_index = TabIndex(tab_index);
-            let logical_id = tab_viewer.id(&mut self.dock_state[path]
+            let logical_id = tab_viewer.id(&mut self
+                .dock_state
+                .node_for_ui(path)
+                .unwrap()
                 .get_leaf_mut()
                 .expect("This node must be a leaf")
                 .tabs[tab_index.0]);
@@ -781,7 +796,10 @@ impl<Tab> DockArea<'_, Tab> {
             }
 
             let (selected, label, tab_style, closeable) = {
-                let leaf = self.dock_state[path]
+                let leaf = self
+                    .dock_state
+                    .node_for_ui(path)
+                    .unwrap()
                     .get_leaf_mut()
                     .expect("This node must be a leaf");
                 let style = fade.unwrap_or_else(|| self.style.as_ref().unwrap());
@@ -851,7 +869,10 @@ impl<Tab> DockArea<'_, Tab> {
                 let is_lonely_tab = self.dock_state[path.surface].num_tabs() == 1;
 
                 if self.show_tab_name_on_hover {
-                    let tabs = self.dock_state[path]
+                    let tabs = self
+                        .dock_state
+                        .node_for_ui(path)
+                        .unwrap()
                         .tabs_mut()
                         .expect("This node must be a leaf");
                     let tab = &mut tabs[tab_index.0];
@@ -877,9 +898,13 @@ impl<Tab> DockArea<'_, Tab> {
                         self.dock_state.is_window(path.surface) || self.is_float_dock(path.surface);
                     let may_float = self.may_float((path, tab_index).into(), tab_viewer);
                     response.context_menu(|ui| {
-                        let leaf = self.dock_state[path]
+                        let leaf = self
+                            .dock_state
+                            .node_for_ui(path)
+                            .unwrap()
                             .get_leaf_mut()
                             .expect("This node must be a leaf");
+                        let leaf_id = leaf.ensure_drag_identity();
                         let tab = &mut leaf.tabs[tab_index.0];
 
                         tab_viewer.context_menu(ui, tab, (path, tab_index).into());
@@ -890,7 +915,13 @@ impl<Tab> DockArea<'_, Tab> {
                             && may_float
                             && ui.add(eject_button).clicked()
                         {
-                            self.to_detach.push((path, tab_index).into());
+                            self.to_detach.push(DragSource::Tab {
+                                path: (path, tab_index).into(),
+                                id: super::super::drag_and_drop::TabIdentity {
+                                    leaf: leaf_id,
+                                    tab: logical_id,
+                                },
+                            });
                             ui.close();
                         }
                         if show_close_button && ui.add(close_button).clicked() {
@@ -990,7 +1021,7 @@ impl<Tab> DockArea<'_, Tab> {
                 tab_hovered = true;
             }
 
-            let leaf = self.dock_state.leaf_mut(path).unwrap();
+            let leaf = self.dock_state.leaf_for_ui(path).unwrap();
             let tab = &mut leaf.tabs[tab_index.0];
 
             if response.clicked()
@@ -1516,7 +1547,7 @@ impl<Tab> DockArea<'_, Tab> {
         if self.show_leaf_close_all_buttons {
             let closeable = self
                 .dock_state
-                .leaf_mut(path)
+                .leaf_for_ui(path)
                 .is_ok_and(|leaf| leaf.tabs.iter_mut().all(|tab| tab_viewer.is_closeable(tab)));
             let label = self
                 .dock_state
@@ -2041,7 +2072,7 @@ impl<Tab> DockArea<'_, Tab> {
 
     /// Assign runtime identity when a group source is retained.
     pub(super) fn group_drag_source(&mut self, path: NodePath) -> Option<DragSource> {
-        let leaf = self.dock_state.leaf_mut(path).ok()?;
+        let leaf = self.dock_state.leaf_for_ui(path).ok()?;
         (!leaf.tabs.is_empty()).then(|| DragSource::Group {
             path,
             id: leaf.ensure_drag_identity(),
@@ -2315,7 +2346,10 @@ impl<Tab> DockArea<'_, Tab> {
             return;
         }
 
-        let leaf = self.dock_state[path]
+        let leaf = self
+            .dock_state
+            .node_for_ui(path)
+            .unwrap()
             .get_leaf_mut()
             .expect("This node must be a leaf");
         let overflow = (actual_width - available_width).at_least(0.0);
@@ -2412,7 +2446,7 @@ impl<Tab> DockArea<'_, Tab> {
         let focused = self.dock_state.focused_leaf() == Some(path);
         let leaf = self
             .dock_state
-            .leaf_mut(path)
+            .leaf_for_ui(path)
             .expect("This node must be a leaf");
         let tab_bar_shown = !(self.hidable_tab_bars && leaf.tab_bar_hidden);
         let body_drag_source = if self.draggable_tabs && !collapsed && !leaf.tabs.is_empty() {

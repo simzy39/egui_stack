@@ -66,7 +66,7 @@ impl<Tab> DockArea<'_, Tab> {
             .ok()
             .and_then(|_| self.dock_state[path].rect())
             .map_or(GHOST_MAX, |rect| rect.size());
-        let Ok(leaf) = self.dock_state.leaf_mut(path) else {
+        let Ok(leaf) = self.dock_state.leaf_for_ui(path) else {
             return;
         };
         // The tab whose body the ghost shows: the dragged one, or the group's active one.

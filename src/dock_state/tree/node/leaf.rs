@@ -1,13 +1,8 @@
-use std::{
-    ops,
-    sync::atomic::{AtomicU64, Ordering},
-};
+use std::ops;
 
 use egui::Rect;
 
 use crate::{Error, Result, TabIndex};
-
-static NEXT_LEAF_DRAG_ID: AtomicU64 = AtomicU64::new(1);
 
 /// The inner data of a [``Node::Leaf``](crate::Node), which contains tabs and can be collapsed.
 #[derive(Debug)]
@@ -18,9 +13,12 @@ static NEXT_LEAF_DRAG_ID: AtomicU64 = AtomicU64::new(1);
 )]
 pub struct LeafNode<Tab> {
     /// The full rectangle - tab bar plus tab body.
+    /// Recomputed during layout; excluded from persistence.
+    #[cfg_attr(feature = "serde", serde(skip))]
     pub rect: Rect,
 
     /// The tab body rectangle.
+    #[cfg_attr(feature = "serde", serde(skip))]
     pub viewport: Rect,
 
     /// All the tabs in this node.
@@ -58,18 +56,10 @@ impl<Tab: Clone> Clone for LeafNode<Tab> {
     }
 }
 
-fn allocate_drag_identity(counter: &AtomicU64) -> u64 {
-    counter
-        .try_update(Ordering::Relaxed, Ordering::Relaxed, |next| {
-            (next != 0).then(|| next.checked_add(1)).flatten()
-        })
-        .unwrap_or_else(|_| panic!("leaf drag identity exhausted"))
-}
-
 impl<Tab> LeafNode<Tab> {
     pub(crate) fn ensure_drag_identity(&mut self) -> u64 {
         if self.drag_identity == 0 {
-            self.drag_identity = allocate_drag_identity(&NEXT_LEAF_DRAG_ID);
+            self.drag_identity = crate::dock_state::identity::next();
         }
         self.drag_identity
     }
@@ -175,11 +165,25 @@ impl<Tab> LeafNode<Tab> {
     }
 
     /// Removes all tabs for which `predicate` returns `false`.
-    pub fn retain_tabs<F>(&mut self, predicate: F)
+    pub fn retain_tabs<F>(&mut self, mut predicate: F)
     where
         F: FnMut(&mut Tab) -> bool,
     {
-        self.tabs.retain_mut(predicate);
+        let mut index = 0;
+        let mut removed_before_active = 0;
+        self.tabs.retain_mut(|tab| {
+            let keep = predicate(tab);
+            if !keep && index <= self.active.0 {
+                removed_before_active += 1;
+            }
+            index += 1;
+            keep
+        });
+        self.active.0 = self
+            .active
+            .0
+            .saturating_sub(removed_before_active)
+            .min(self.tabs.len().saturating_sub(1));
     }
 
     /// Return the area and tab which is currently representing this [`LeafNode`]
@@ -234,6 +238,8 @@ mod removal_tests {
 #[cfg(test)]
 mod drag_identity_tests {
     use super::*;
+    use crate::dock_state::identity::allocate as allocate_drag_identity;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     #[test]
     fn allocator_returns_unique_nonzero_identities() {

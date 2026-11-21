@@ -1320,14 +1320,7 @@ pub(crate) struct SpaceParts<'a, Tab> {
     pub(crate) id: Id,
 }
 
-/// What moves out of a dock to a new float.
-#[derive(Clone, Copy, Debug)]
-pub(crate) enum Detach {
-    /// A tab.
-    Tab(TabPath),
-    /// A whole group: a leaf and all its tabs.
-    Group(NodePath),
-}
+pub(crate) use crate::dock_state::MoveSource as Detach;
 
 /// Moves `source` into a new dock (`float-N`), records where its tabs came from (unless they
 /// leave another float: they keep the origin they had), and asks for a float showing it at
@@ -1345,21 +1338,33 @@ pub(crate) fn detach<Tab>(
     host: crate::layout::FloatHost,
     id_of: &mut dyn FnMut(&mut Tab) -> Id,
 ) -> Option<String> {
+    if !crate::dock_state::window_state::valid_rect(rect)
+        || physical.is_some_and(|rect| !crate::dock_state::window_state::valid_rect(rect))
+        || !state.valid_move_source(source)
+    {
+        return None;
+    }
     let (node, tabs) = match source {
-        Detach::Tab(path) => {
-            let end = path.tab.0.checked_add(1)?;
-            (path.node_path(), path.tab.0..end)
-        }
+        Detach::Tab(path) => (path.node_path(), path.tab.0..path.tab.0 + 1),
         Detach::Group(path) => (path, 0..state.leaf(path).ok()?.tabs.len()),
     };
     let from_float = state.is_window(node.surface)
         || docks
             .iter()
             .any(|dock| dock.surface == node.surface && dock.floating);
-    let leaf = state.leaf_mut(node).ok()?;
-    if tabs.end > leaf.tabs.len() || tabs.is_empty() {
-        return None;
+    if !from_float {
+        dock_name(docks, node.surface)?;
     }
+    // Reserve a name without publishing it or granting mutable model access.
+    let mut next = floating.next;
+    let name = loop {
+        next = next.checked_add(1)?;
+        let name = format!("float-{next}");
+        if !docks.iter().any(|dock| dock.name == name) {
+            break name;
+        }
+    };
+    let leaf = state.leaf_mut(node).expect("preflighted float source");
     let ids: Vec<Id> = tabs.clone().map(|i| id_of(&mut leaf.tabs[i])).collect();
     // Stage restoration metadata: a rejected move must leave the existing
     // origin records and dock registry unchanged.
@@ -1370,16 +1375,9 @@ pub(crate) fn detach<Tab>(
             record_origin(state, docks, &mut pending_origins, path, id_of)?;
         }
     }
-    // Do not consume a float identifier until the move has committed.
-    let mut next = floating.next;
-    let name = loop {
-        next = next.checked_add(1)?;
-        let name = format!("float-{next}");
-        if !docks.iter().any(|dock| dock.name == name) {
-            break name;
-        }
-    };
-    let surface = state.add_docked_surface(Tree::default());
+    let surface = state
+        .detach_to_dock(source)
+        .expect("preflighted float source");
     docks.push(Dock {
         name: name.clone(),
         surface,
@@ -1390,18 +1388,6 @@ pub(crate) fn detach<Tab>(
         floating: true,
         zone: None,
     });
-    let moved = match source {
-        Detach::Tab(path) => state.move_tab(path, crate::TabDestination::EmptySurface(surface)),
-        Detach::Group(path) => state.move_node(path, crate::TabDestination::EmptySurface(surface)),
-    };
-    if !moved {
-        docks.pop();
-        // The new dock occupies a previously vacant surface. Leave that slot
-        // vacant again without resetting focus on the source dock:
-        // remove_surface unconditionally focuses the main surface.
-        state.take_surface(surface);
-        return None;
-    }
     *origins = pending_origins;
     floating.next = next;
     floating.pending.push(PendingFloat {
@@ -1686,7 +1672,7 @@ mod detach_tests {
     fn removing_dock_with_missing_surface_does_not_lose_registration() {
         let mut space = DockSpace::new();
         let surface = space.add_dock("editor", DockRules::default(), vec!["one"]);
-        space.state.take_surface(surface).unwrap();
+        *space.state.get_surface_mut(surface).unwrap() = Surface::Empty;
         assert!(space.remove_dock("editor").is_none());
         assert_eq!(space.dock_surface("editor"), Some(surface));
         assert_eq!(space.docks.len(), 1);
@@ -1710,7 +1696,7 @@ mod detach_tests {
         let original = space.add_dock("original", DockRules::default(), vec!["first"]);
         space.add_dock("fallback", DockRules::default(), vec!["existing"]);
         let (tab, place) = space.take_with_place(Id::unique("first"), id).unwrap();
-        space.state.take_surface(original).unwrap();
+        *space.state.get_surface_mut(original).unwrap() = Surface::Empty;
         assert_eq!(space.dock_surface("original"), Some(original));
         assert_eq!(space.restore_at(tab, place, id).unwrap(), "fallback");
         assert!(space.dock("fallback").unwrap().find_tab(&"first").is_some());
@@ -1721,7 +1707,7 @@ mod detach_tests {
         let mut space = DockSpace::new();
         let original = space.add_dock("original", DockRules::default(), vec!["first"]);
         let (tab, place) = space.take_with_place(Id::unique("first"), id).unwrap();
-        space.state.take_surface(original).unwrap();
+        *space.state.get_surface_mut(original).unwrap() = Surface::Empty;
         assert_eq!(space.restore_at(tab, place, id).unwrap_err(), "first");
         assert_eq!(space.dock_surface("original"), Some(original));
     }
@@ -1760,7 +1746,7 @@ mod detach_tests {
 
         // A registered dock can become unusable when its surface was taken
         // independently. Restoration must select a real destination tree.
-        space.state.take_surface(original).unwrap();
+        *space.state.get_surface_mut(original).unwrap() = Surface::Empty;
         assert!(space.has_dock("original"));
         assert!(space.dock("original").is_none());
         assert_eq!(space.restore_at(tab, place, id).unwrap(), "fallback");

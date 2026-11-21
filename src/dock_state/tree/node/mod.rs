@@ -1,18 +1,6 @@
-use std::sync::atomic::{AtomicU64, Ordering};
-
 use egui::Rect;
 
 use crate::TabIndex;
-
-static NEXT_CONTAINER_DRAG_ID: AtomicU64 = AtomicU64::new(1);
-
-pub(super) fn allocate_container_drag_identity() -> u64 {
-    NEXT_CONTAINER_DRAG_ID
-        .try_update(Ordering::Relaxed, Ordering::Relaxed, |next| {
-            (next != 0).then(|| next.checked_add(1)).flatten()
-        })
-        .unwrap_or_else(|_| panic!("container drag identity exhausted"))
-}
 
 mod grid;
 mod leaf;
@@ -413,9 +401,7 @@ impl<Tab> Node<Tab> {
     /// Removes a tab at given `index` from the node.
     /// Returns the removed tab if the node is a `Leaf`, or `None` otherwise.
     ///
-    /// # Panics
-    ///
-    /// Panics if `index` is out of bounds.
+    /// Returns `None` for a non-leaf node or an out-of-bounds tab index.
     #[inline]
     pub fn remove_tab(&mut self, tab_index: TabIndex) -> Option<Tab> {
         match self {
@@ -435,7 +421,7 @@ impl<Tab> Node<Tab> {
 
     /// Returns a new [`Node`] while mapping and filtering the tab type.
     /// If this [`Node`] remains empty, it will change to [`Node::Empty`].
-    pub fn filter_map_tabs<F, NewTab>(&self, function: F) -> Node<NewTab>
+    pub fn filter_map_tabs<F, NewTab>(&self, mut function: F) -> Node<NewTab>
     where
         F: FnMut(&Tab) -> Option<NewTab>,
     {
@@ -451,15 +437,32 @@ impl<Tab> Node<Tab> {
                     tab_bar_hidden,
                     ..
                 } = leaf;
-                let tabs: Vec<_> = tabs.iter().filter_map(function).collect();
+                let mut removed_before_active = 0;
+                let tabs: Vec<_> = tabs
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, tab)| {
+                        let mapped = function(tab);
+                        if mapped.is_none() && index <= active.0 {
+                            removed_before_active += 1;
+                        }
+                        mapped
+                    })
+                    .collect();
                 if tabs.is_empty() {
                     Node::Empty
                 } else {
+                    let active = TabIndex(
+                        active
+                            .0
+                            .saturating_sub(removed_before_active)
+                            .min(tabs.len() - 1),
+                    );
                     Node::Leaf(LeafNode {
                         rect: *rect,
                         viewport: *viewport,
                         tabs,
-                        active: *active,
+                        active,
                         scroll: *scroll,
                         collapsed: *collapsed,
                         tab_bar_hidden: *tab_bar_hidden,

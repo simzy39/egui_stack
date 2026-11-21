@@ -867,6 +867,65 @@ mod tests {
     }
 
     #[test]
+    fn stale_cross_viewport_group_session_does_not_poison_next_drag() {
+        let mut dock = DockState::new(vec!["original"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let mut viewer = Viewer { allow_windows: true };
+        let rect = Rect::from_min_size(Pos2::ZERO, egui::vec2(200.0, 100.0));
+        let mut area = DockArea::new(&mut dock);
+        let original = area.group_drag_source(root).unwrap();
+        let stale = DragSession::new(original, rect, egui::ViewportId::ROOT, Pos2::ZERO);
+        assert!(stale.source_in(area.dock_state));
+
+        // A replaced leaf must invalidate the old session, but not prevent a
+        // fresh gesture from starting on the new leaf at the same location.
+        *area.dock_state.main_surface_mut() = crate::Tree::new(vec!["replacement"]);
+        assert!(!stale.source_in(area.dock_state));
+        assert!(!area.drag_source_valid(stale.payload, &mut viewer));
+        let fresh = area.group_drag_source(root).unwrap();
+        assert_ne!(fresh, original);
+        let next = DragSession::new(fresh, rect, egui::ViewportId::ROOT, Pos2::ZERO);
+        assert!(next.source_in(area.dock_state));
+        assert!(area.drag_source_valid(next.payload, &mut viewer));
+
+        let [left, right] = area
+            .dock_state
+            .main_surface_mut()
+            .split_right(NodeIndex::root(), 0.5, vec!["target"]);
+        let left = NodePath::new(SurfaceIndex::main(), left);
+        let right = NodePath::new(SurfaceIndex::main(), right);
+        // Relocation invalidates even the newly retained path.
+        assert!(!area.drag_source_valid(fresh, &mut viewer));
+        assert!(!area.apply_move(
+            fresh,
+            TabDestination::Node(right, TabInsert::Append),
+            &mut viewer,
+        ));
+        assert_eq!(area.dock_state[left].tabs().unwrap(), &["replacement"]);
+        assert_eq!(area.dock_state[right].tabs().unwrap(), &["target"]);
+    }
+
+    #[test]
+    fn competing_group_handles_cannot_claim_the_same_press() {
+        use super::super::super::state::GroupPress;
+        let mut dock = DockState::new(vec!["original"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let mut area = DockArea::new(&mut dock);
+        let source = area.group_drag_source(root).unwrap();
+        let DragSource::Group { id, .. } = source else {
+            panic!("expected a group source");
+        };
+        let original = Id::new("original_handle");
+        let competing = Id::new("competing_handle");
+        let press = GroupPress { widget: original, source };
+        assert!(press.matches(original, root, id));
+        assert!(!press.matches(competing, root, id));
+        // A newly created leaf at the same path cannot reuse the source.
+        *area.dock_state.main_surface_mut() = crate::Tree::new(vec!["replacement"]);
+        assert!(!area.group_source_valid(root, id));
+    }
+
+    #[test]
     fn group_identity_rejects_a_leaf_relocated_to_another_path() {
         let mut dock = DockState::new(vec!["original"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());

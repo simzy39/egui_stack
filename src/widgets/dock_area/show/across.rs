@@ -481,11 +481,18 @@ impl<Tab> DockArea<'_, Tab> {
         if let TabDestination::Node(target, _) = &destination {
             match source {
                 DragSource::Group { path, .. } if path == *target => return false,
-                DragSource::Tab { path, .. }
-                    if path.node_path() == *target
-                        && self.dock_state[path.node_path()].tabs_count() == 1 =>
-                {
-                    return false;
+                DragSource::Tab { path, .. } if path.node_path() == *target => {
+                    let count = self.dock_state[path.node_path()].tabs_count();
+                    let unchanged = match destination {
+                        TabDestination::Node(_, TabInsert::Insert(index)) => {
+                            index.0 == path.tab.0 || index.0 == path.tab.0 + 1
+                        }
+                        TabDestination::Node(_, TabInsert::Append) => path.tab.0 + 1 == count,
+                        _ => count == 1,
+                    };
+                    if unchanged || count == 1 {
+                        return false;
+                    }
                 }
                 _ => {}
             }
@@ -773,6 +780,41 @@ mod tests {
             area.dock_state.leaf(target_path).unwrap().tabs,
             ["destination", "original", "added"],
         );
+    }
+
+    #[test]
+    fn unchanged_tab_reorder_does_not_report_a_move() {
+        let mut dock = DockState::new(vec!["first", "second", "third"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let mut viewer = Viewer { allow_windows: true };
+        let mut area = DockArea::new(&mut dock);
+        let source = DragSource::Tab {
+            path: TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(1)),
+            id: Id::unique("second"),
+        };
+        for insert in [
+            TabInsert::Insert(TabIndex(1)),
+            TabInsert::Insert(TabIndex(2)),
+        ] {
+            assert!(!area.apply_move(
+                source,
+                TabDestination::Node(root, insert),
+                &mut viewer,
+            ));
+            assert_eq!(
+                area.dock_state.leaf(root).unwrap().tabs,
+                ["first", "second", "third"],
+            );
+        }
+        let last = DragSource::Tab {
+            path: TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(2)),
+            id: Id::unique("third"),
+        };
+        assert!(!area.apply_move(
+            last,
+            TabDestination::Node(root, TabInsert::Append),
+            &mut viewer,
+        ));
     }
 
     #[test]

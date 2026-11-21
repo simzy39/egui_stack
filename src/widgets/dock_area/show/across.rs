@@ -926,6 +926,68 @@ mod tests {
     }
 
     #[test]
+    fn rendered_pointer_frames_clear_stale_group_press_after_replacement() {
+        use egui::{Event, PointerButton, RawInput, pos2};
+
+        let ctx = egui::Context::default();
+        let mut dock = DockState::new(vec!["original"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let mut viewer = Viewer { allow_windows: true };
+        let area_id = Id::new("rendered_drag_test");
+        let original = {
+            let mut area = DockArea::new(&mut dock);
+            area.group_drag_source(root).unwrap()
+        };
+        let DragSource::Group { .. } = original else {
+            panic!("expected group source");
+        };
+
+        let mut render = |events: Vec<Event>, dock: &mut DockState<&'static str>| {
+            let input = RawInput {
+                events,
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(800.0, 600.0))),
+                ..Default::default()
+            };
+            let _ = ctx.run(input, |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    DockArea::new(dock)
+                        .id(area_id)
+                        .show_inside(ui, &mut viewer);
+                });
+            });
+        };
+        render(vec![], &mut dock);
+        let point = pos2(100.0, 30.0);
+        render(vec![
+            Event::PointerMoved(point),
+            Event::PointerButton {
+                pos: point,
+                button: PointerButton::Primary,
+                pressed: true,
+                modifiers: egui::Modifiers::NONE,
+            },
+        ], &mut dock);
+        render(vec![Event::PointerMoved(pos2(180.0, 30.0))], &mut dock);
+
+        // A new leaf occupies the original location while the pointer is held.
+        *dock.main_surface_mut() = crate::Tree::new(vec!["replacement"]);
+        render(vec![Event::PointerMoved(pos2(210.0, 30.0))], &mut dock);
+        render(vec![Event::PointerButton {
+            pos: pos2(210.0, 30.0),
+            button: PointerButton::Primary,
+            pressed: false,
+            modifiers: egui::Modifiers::NONE,
+        }], &mut dock);
+
+        assert_eq!(dock[root].tabs().unwrap(), &["replacement"]);
+        let state = State::load(&ctx, area_id);
+        assert!(state.group_press.is_none());
+        assert!(state.tab_press.is_none());
+        assert!(state.drag_carries_group.is_none());
+        assert!(state.drag_start.is_none());
+    }
+
+    #[test]
     fn group_identity_rejects_a_leaf_relocated_to_another_path() {
         let mut dock = DockState::new(vec!["original"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());

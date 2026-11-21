@@ -1626,7 +1626,8 @@ mod tests {
                 events,
                 ..Default::default()
             };
-            let _ = ctx.run(input, |_ctx| {});
+            ctx.begin_pass(input);
+            let _ = ctx.end_pass();
         };
 
         // The original press and subsequent movement occur in separate egui frames.
@@ -1748,13 +1749,13 @@ mod tests {
                 screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(800.0, 600.0))),
                 ..Default::default()
             };
-            let _ = ctx.run(input, |ctx| {
-                egui::CentralPanel::default().show(ctx, |ui| {
+            ctx.begin_pass(input);
+            egui::CentralPanel::default().show(&ctx, |ui| {
                     DockArea::new(dock)
                         .id(area_id)
                         .show_inside(ui, &mut viewer);
-                });
             });
+            let _ = ctx.end_pass();
         };
         render(vec![], &mut dock);
         let point = pos2(100.0, 30.0);

@@ -106,7 +106,7 @@ impl DragSession {
     }
 
     /// A report is current for the source's present or immediately preceding pass.
-    fn report_is_current(&self, viewport: ViewportId, report: &Report) -> bool {
+    pub(crate) fn report_is_current(&self, viewport: ViewportId, report: &Report) -> bool {
         viewport != self.source
             && report.stamp <= self.pass
             && self.pass - report.stamp <= 1

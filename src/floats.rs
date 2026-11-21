@@ -278,7 +278,7 @@ impl Floating {
         if session.source == viewport {
             self.session = None;
         } else if let Some(report) = session.reports.remove(&viewport)
-            && report.stamp.saturating_add(1) >= session.pass
+            && session.report_is_current(viewport, &report)
         {
             session.cancelled = true;
             session.reports.clear();
@@ -1797,6 +1797,26 @@ mod viewport_lifecycle_tests {
         active.pass = 10;
         active.reports.insert(target, Report {
             stamp: 2,
+            rank: 1,
+            outcome: Outcome::Refused,
+            unfold: None,
+        });
+        floating.session = Some(active);
+        floating.viewport_closed(target);
+        let active = floating.session.as_ref().unwrap();
+        assert!(!active.cancelled);
+        assert!(active.reports.is_empty());
+    }
+
+    #[test]
+    fn closing_future_report_does_not_cancel_current_drag() {
+        let source = ViewportId::from_hash_of("source");
+        let target = ViewportId::from_hash_of("future-target");
+        let mut floating = Floating::default();
+        let mut active = session(source);
+        active.pass = 5;
+        active.reports.insert(target, Report {
+            stamp: 6,
             rank: 1,
             outcome: Outcome::Refused,
             unfold: None,

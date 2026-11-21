@@ -470,11 +470,17 @@ impl<Tab> DockArea<'_, Tab> {
         }
         // DockState::move_node treats a group dropped on itself as a no-op.
         // Report that honestly so a rejected/no-op drop cannot unfold a zone.
-        if matches!(
-            (source, &destination),
-            (DragSource::Group(path), TabDestination::Node(target, _)) if path == *target
-        ) {
-            return false;
+        if let TabDestination::Node(target, _) = &destination {
+            match source {
+                DragSource::Group(path) if path == *target => return false,
+                DragSource::Tab { path, .. }
+                    if path.node_path() == *target
+                        && self.dock_state[path.node_path()].tabs_count() == 1 =>
+                {
+                    return false;
+                }
+                _ => {}
+            }
         }
         let to = match destination {
             TabDestination::Node(path, _) => Some(path.surface),
@@ -795,6 +801,23 @@ mod tests {
             &mut viewer,
         ));
         assert_eq!(area.dock_state.leaf(root).unwrap().tabs, ["first", "second"]);
+    }
+
+    #[test]
+    fn moving_a_single_tab_within_its_only_leaf_is_a_no_op() {
+        let mut dock = DockState::new(vec!["only"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let mut viewer = Viewer { allow_windows: true };
+        let mut area = DockArea::new(&mut dock);
+        assert!(!area.apply_move(
+            DragSource::Tab {
+                path: TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(0)),
+                id: Id::unique("only"),
+            },
+            TabDestination::Node(root, TabInsert::Append),
+            &mut viewer,
+        ));
+        assert_eq!(area.dock_state.leaf(root).unwrap().tabs, ["only"]);
     }
 
     #[test]

@@ -258,7 +258,9 @@ impl<Tab> DockState<Tab> {
     pub fn remove_surface(&mut self, surface_index: SurfaceIndex) -> Option<Surface<Tab>> {
         assert!(!surface_index.is_main());
         (surface_index.0 < self.surfaces.len()).then(|| {
-            self.focused_surface = Some(SurfaceIndex::main());
+            if self.focused_surface == Some(surface_index) {
+                self.focused_surface = Some(SurfaceIndex::main());
+            }
             if surface_index.0 == self.surfaces.len() - 1 {
                 self.surfaces.pop().unwrap()
             } else {
@@ -1158,6 +1160,26 @@ mod test {
         let leaf = dock.leaf(destination).unwrap();
         assert_eq!(leaf.tabs, ["c", "a", "b"]);
         assert_eq!(leaf.active, TabIndex(2));
+    }
+
+    #[test]
+    fn removing_an_unfocused_surface_preserves_focus() {
+        let mut dock = DockState::new(vec!["main"]);
+        let focused = dock.add_docked_surface(Tree::new(vec!["focused"]));
+        let removed = dock.add_docked_surface(Tree::new(vec!["removed"]));
+        dock.set_focused_node_and_surface(NodePath::new(focused, NodeIndex::root()));
+        assert_eq!(dock.focused_leaf().unwrap().surface, focused);
+        dock.remove_surface(removed);
+        assert_eq!(dock.focused_leaf().unwrap().surface, focused);
+    }
+
+    #[test]
+    fn removing_focused_surface_returns_focus_to_main() {
+        let mut dock = DockState::new(vec!["main"]);
+        let focused = dock.add_docked_surface(Tree::new(vec!["focused"]));
+        dock.set_focused_node_and_surface(NodePath::new(focused, NodeIndex::root()));
+        dock.remove_surface(focused);
+        assert_eq!(dock.focused_leaf().unwrap().surface, SurfaceIndex::main());
     }
 
     #[test]

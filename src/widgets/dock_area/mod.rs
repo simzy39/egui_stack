@@ -234,6 +234,16 @@ struct BodyLeaf {
 }
 
 impl BodyLeaf {
+    /// Consume the temporary request without requiring egui::Id: Default.
+    fn take_request(
+        data: &mut egui::util::IdTypeMap,
+        key: Id,
+    ) -> Option<(u64, Option<DragSource>, Id)> {
+        let request = data.get_temp::<(u64, Option<DragSource>, Id)>(key)?;
+        data.insert_temp(key, (0_u64, None::<DragSource>, request.2));
+        Some(request)
+    }
+
     /// First handle wins within a pass, but an unconsumed request cannot block later passes.
     fn retain_first_request(
         data: &mut egui::util::IdTypeMap,
@@ -338,7 +348,7 @@ mod custom_handle_request_tests {
             assert_eq!(data.get_temp::<(u64, Option<DragSource>, Id)>(key), None);
             BodyLeaf::retain_first_request(data, key, 5, (Some(source()), valid));
             assert_eq!(
-                data.remove_temp::<(u64, Option<DragSource>, Id)>(key),
+                BodyLeaf::take_request(data, key),
                 Some((5, Some(source()), valid)),
             );
         });
@@ -377,7 +387,7 @@ mod custom_handle_request_tests {
                 BodyLeaf::retain_first_request(data, key, 10, (Some(source()), second));
             });
             assert_eq!(
-                ctx.data_mut(|data| data.remove_temp::<(u64, Option<DragSource>, Id)>(key)),
+                ctx.data_mut(|data| BodyLeaf::take_request(data, key)),
                 Some((10, Some(source()), first)),
             );
         }
@@ -398,7 +408,7 @@ mod custom_handle_request_tests {
                 BodyLeaf::retain_first_request(data, key, 11, (Some(source()), first));
             });
             assert_eq!(
-                ctx.data_mut(|data| data.remove_temp::<(u64, Option<DragSource>, Id)>(key)),
+                ctx.data_mut(|data| BodyLeaf::take_request(data, key)),
                 Some((11, Some(source()), second)),
             );
         }
@@ -428,7 +438,7 @@ mod custom_handle_request_tests {
             );
             BodyLeaf::retain_first_request(data, key, 11, (Some(second), second_handle));
             assert_eq!(
-                data.remove_temp::<(u64, Option<DragSource>, Id)>(key),
+                BodyLeaf::take_request(data, key),
                 Some((11, Some(second), second_handle)),
             );
         });
@@ -470,7 +480,7 @@ mod custom_handle_request_tests {
             assert!(!pending.is_some_and(|(pass, _, _)| pass == 11));
             BodyLeaf::retain_first_request(data, key, 11, (Some(source()), handle));
             assert_eq!(
-                data.remove_temp::<(u64, Option<DragSource>, Id)>(key),
+                BodyLeaf::take_request(data, key),
                 Some((11, Some(source()), handle)),
             );
         });
@@ -507,12 +517,12 @@ mod custom_handle_request_tests {
         ctx.data_mut(|data| {
             BodyLeaf::retain_first_request(data, key, 10, (Some(source()), first));
             assert_eq!(
-                data.remove_temp::<(u64, Option<DragSource>, Id)>(key),
+                BodyLeaf::take_request(data, key),
                 Some((10, Some(source()), first)),
             );
             BodyLeaf::retain_first_request(data, key, 10, (Some(source()), second));
             assert_eq!(
-                data.remove_temp::<(u64, Option<DragSource>, Id)>(key),
+                BodyLeaf::take_request(data, key),
                 Some((10, Some(source()), second)),
             );
         });

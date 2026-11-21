@@ -214,7 +214,7 @@ mod recency_tests {
         DragSession::new(
             DragSource::Tab {
                 path: TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(0)),
-                id: Id::new("tab"),
+                id: Id::unique("tab"),
             },
             Rect::NOTHING,
             ViewportId::from_hash_of("source"),

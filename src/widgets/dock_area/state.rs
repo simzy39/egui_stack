@@ -146,13 +146,13 @@ mod retained_source_tests {
         use crate::{NodeIndex, SurfaceIndex, TabIndex};
         let path = TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(0));
         let other = TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(1));
-        let widget = Id::new("original_tab_widget");
-        let id = Id::new("original_tab");
+        let widget = Id::unique("original_tab_widget");
+        let id = Id::unique("original_tab");
         let press = TabPress { widget, path, tab_id: id };
         assert!(press.matches(widget, path, id));
-        assert!(!press.matches(Id::new("other_widget"), path, id));
+        assert!(!press.matches(Id::unique("other_widget"), path, id));
         assert!(!press.matches(widget, other, id));
-        assert!(!press.matches(widget, path, Id::new("replacement_tab")));
+        assert!(!press.matches(widget, path, Id::unique("replacement_tab")));
     }
 
     #[test]
@@ -162,15 +162,15 @@ mod retained_source_tests {
             id: 7,
         };
         let press = GroupPress {
-            widget: Id::new("original"),
+            widget: Id::unique("original"),
             source,
         };
         let root = NodePath::new(SurfaceIndex::main(), crate::NodeIndex::root());
-        assert!(press.matches(Id::new("original"), root, 7));
-        assert!(!press.matches(Id::new("replacement"), root, 7));
-        assert!(!press.matches(Id::new("original"), root, 8));
+        assert!(press.matches(Id::unique("original"), root, 7));
+        assert!(!press.matches(Id::unique("replacement"), root, 7));
+        assert!(!press.matches(Id::unique("original"), root, 8));
         assert!(!press.matches(
-            Id::new("original"),
+            Id::unique("original"),
             NodePath::new(SurfaceIndex::main(), crate::NodeIndex(1)),
             7,
         ));
@@ -181,7 +181,7 @@ mod retained_source_tests {
         let path = NodePath::new(SurfaceIndex::main(), crate::NodeIndex::root());
         let mut state = State {
             group_press: Some(GroupPress {
-                widget: Id::new("handle"),
+                widget: Id::unique("handle"),
                 source: DragSource::Group { path, id: 7 },
             }),
             drag_carries_group: Some(true),
@@ -200,7 +200,7 @@ mod retained_source_tests {
     fn finishing_a_drag_clears_both_sources_and_modifier_mode() {
         let mut state = State {
             group_press: Some(GroupPress {
-                widget: Id::new("grip"),
+                widget: Id::unique("grip"),
                 source: DragSource::Group {
                     path: NodePath::new(SurfaceIndex::main(), crate::NodeIndex::root()),
                     id: 42,
@@ -221,13 +221,13 @@ mod retained_source_tests {
     fn finishing_a_tab_drag_clears_the_original_tab_press() {
         let mut state = State {
             tab_press: Some(TabPress {
-                widget: Id::new("handle"),
+                widget: Id::unique("handle"),
                 path: TabPath::new(
                     SurfaceIndex::main(),
                     crate::NodeIndex::root(),
                     crate::TabIndex(0),
                 ),
-                tab_id: Id::new("tab"),
+                tab_id: Id::unique("tab"),
             }),
             drag_carries_group: Some(false),
             ..State::default()

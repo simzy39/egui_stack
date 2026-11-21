@@ -1025,6 +1025,39 @@ mod test {
     use super::*;
 
     #[test]
+    fn invalid_move_endpoints_do_not_remove_source_tabs() {
+        let mut dock = DockState::new(vec!["first", "second"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let invalid = NodePath::new(SurfaceIndex::main(), NodeIndex(999));
+        let tab = TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(0));
+
+        assert!(!dock.move_node(
+            root,
+            TabDestination::Node(invalid, TabInsert::Append),
+        ));
+        assert!(!dock.move_tab(
+            tab,
+            TabDestination::Node(invalid, TabInsert::Append),
+        ));
+        assert!(!dock.move_tab(
+            TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(999)),
+            TabDestination::Node(root, TabInsert::Append),
+        ));
+        assert_eq!(dock.leaf(root).unwrap().tabs, ["first", "second"]);
+    }
+
+    #[test]
+    fn same_leaf_group_move_is_a_noop() {
+        let mut dock = DockState::new(vec!["first", "second"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        assert!(!dock.move_node(
+            root,
+            TabDestination::Node(root, TabInsert::Append),
+        ));
+        assert_eq!(dock.leaf(root).unwrap().tabs, ["first", "second"]);
+    }
+
+    #[test]
     fn retain_none_then_push() {
         let mut t = DockState::new(vec![]);
         t.push_to_focused_leaf(0);

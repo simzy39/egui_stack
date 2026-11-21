@@ -1286,7 +1286,7 @@ pub(crate) fn detach<Tab>(
     if !from_float {
         for i in tabs {
             let path = TabPath::new(node.surface, node.node, crate::TabIndex(i));
-            record_origin(state, docks, &mut pending_origins, path, id_of);
+            record_origin(state, docks, &mut pending_origins, path, id_of)?;
         }
     }
     // Do not consume a float identifier until the move has committed.

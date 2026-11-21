@@ -1820,6 +1820,36 @@ mod tests {
     }
 
     #[test]
+    fn reported_grid_destination_rejects_replacement_at_the_same_path() {
+        let mut dock = DockState::new(vec!["one", "two", "three", "four"]);
+        assert!(dock
+            .main_surface_mut()
+            .arrange_as_grid(NodeIndex::root(), crate::GridLayout::Auto));
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let mut area = DockArea::new(&mut dock);
+        let identity = area.capture_destination_identity(root).unwrap();
+
+        assert!(area.reported_destination_identity_valid(
+            &TabDestination::Node(root, TabInsert::Split(crate::Split::Below)),
+            Some(&identity),
+        ));
+
+        let replacement = area
+            .dock_state
+            .node(root)
+            .unwrap()
+            .get_grid()
+            .unwrap()
+            .clone();
+        *area.dock_state.node_mut(root).unwrap() = crate::Node::Grid(replacement);
+
+        assert!(!area.reported_destination_identity_valid(
+            &TabDestination::Node(root, TabInsert::Split(crate::Split::Below)),
+            Some(&identity),
+        ));
+    }
+
+    #[test]
     fn stale_drag_paths_are_rejected() {
         let mut dock = DockState::new(vec!["a"]);
         let area = DockArea::new(&mut dock);

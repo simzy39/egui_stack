@@ -11,7 +11,7 @@ use super::{
     },
     session::Outcome,
     PendingFloat,
-    state::State,
+    state::{GroupPress, State},
     tab_removal::TabRemoval,
 };
 use crate::NodePath;

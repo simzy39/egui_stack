@@ -16,7 +16,7 @@ use crate::{
     TabFocus, TabIndex, TabInsert, TabMeasure, TabPaint, TabStyle, TabViewer,
     dock_area::{
         drag_and_drop::{DragData, DragDropState, DragSource, HoverData, TreeComponent},
-        state::{State, TabPress},
+        state::{GroupPress, State, TabPress},
     },
     utils::{fade_visuals, rect_set_size_centered},
     widgets::painter::{Attached, corners_within},

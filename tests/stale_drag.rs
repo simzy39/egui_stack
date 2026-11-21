@@ -99,6 +99,37 @@ fn the_dragged_tabs_leaf_removed_mid_drag() {
     assert_eq!(tabs(harness.state()), ["Third", "Fourth"]);
 }
 
+/// A reused node index must not inherit a drag from the leaf that used to occupy it.
+#[test]
+#[cfg_attr(miri, ignore = "drives a whole UI; too slow under Miri")]
+fn replaced_source_leaf_at_reused_node_index_cannot_complete_drag() {
+    for immediate_release in [false, true] {
+        let mut harness = harness();
+        let target = drag_first_over_right_leaf(&mut harness);
+        let left = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
+        // Replace the entire leaf rather than its tabs. The path remains valid.
+        *harness.state_mut().leaf_mut(left).unwrap() =
+            egui_stack::LeafNode::new(vec!["Replacement".to_owned()]);
+        if !immediate_release {
+            for _ in 0..3 {
+                harness.hover_at(target);
+                harness.step();
+            }
+        }
+        harness.drop_at(target);
+        harness.run_steps(5);
+        assert_eq!(harness.state().leaf(left).unwrap().tabs(), ["Replacement"]);
+        assert_eq!(
+            harness
+                .state()
+                .leaf(NodePath::new(SurfaceIndex::main(), NodeIndex(2)))
+                .unwrap()
+                .tabs(),
+            ["Third", "Fourth"]
+        );
+    }
+}
+
 #[test]
 #[cfg_attr(miri, ignore = "drives a whole UI; too slow under Miri")]
 fn the_hovered_leaf_removed_mid_drag() {

@@ -265,6 +265,17 @@ impl<Tab> DockArea<'_, Tab> {
         tab_viewer: &mut impl TabViewer<Tab = Tab>,
     ) {
         let viewport = ui.ctx().viewport_id();
+        let destination_identity = match &outcome {
+            Outcome::Drop(TabDestination::Node(path, insert))
+                if !matches!(insert, TabInsert::Split(_)) =>
+            {
+                self.dock_state
+                    .leaf_mut(*path)
+                    .ok()
+                    .map(|leaf| leaf.ensure_drag_identity())
+            }
+            _ => None,
+        };
         let Some(space) = self.space.as_mut() else {
             return;
         };
@@ -280,6 +291,7 @@ impl<Tab> DockArea<'_, Tab> {
                     stamp,
                     rank,
                     outcome,
+                    destination_identity,
                     unfold,
                 },
             );
@@ -296,6 +308,7 @@ impl<Tab> DockArea<'_, Tab> {
             stamp: 0,
             rank,
             outcome,
+            destination_identity,
             unfold,
         };
         self.release_over(report, source, rect, tab_viewer);
@@ -319,7 +332,11 @@ impl<Tab> DockArea<'_, Tab> {
         let src = source.component();
         match report.outcome {
             Outcome::Drop(destination) => {
-                if !self.destination_valid(&destination) {
+                if !self.reported_destination_identity_valid(
+                    &destination,
+                    report.destination_identity,
+                ) || !self.destination_valid(&destination)
+                {
                     return;
                 }
                 let surface = match destination {
@@ -444,6 +461,32 @@ impl<Tab> DockArea<'_, Tab> {
                 .leaf(path)
                 .is_ok_and(|leaf| !leaf.tabs.is_empty()),
             TreeComponent::Surface(_) => false,
+        }
+    }
+
+    /// Whether a reported leaf destination is still the exact leaf that was hovered.
+    ///
+    /// A valid path is not sufficient: tree slots can be reused between the remote
+    /// viewport's report and the source viewport's release.
+    fn reported_destination_identity_valid(
+        &self,
+        destination: &TabDestination,
+        identity: Option<u64>,
+    ) -> bool {
+        let Some(identity) = identity else {
+            return true;
+        };
+        match destination {
+            TabDestination::Node(path, insert)
+                if !matches!(insert, TabInsert::Split(_)) =>
+            {
+                identity != 0
+                    && self
+                        .dock_state
+                        .leaf(*path)
+                        .is_ok_and(|leaf| leaf.drag_identity == identity)
+            }
+            _ => false,
         }
     }
 
@@ -712,6 +755,7 @@ mod tests {
                             NodePath::new(target, NodeIndex::root()),
                             TabInsert::Append,
                         )),
+                        destination_identity: None,
                         unfold: None,
                     },
                     src,
@@ -892,6 +936,7 @@ mod tests {
                 stamp: 0,
                 rank: 0,
                 outcome: Outcome::Drop(destination),
+                destination_identity: None,
                 unfold: None,
             },
             source,
@@ -1039,6 +1084,7 @@ mod tests {
                 stamp: 0,
                 rank: 0,
                 outcome: Outcome::Drop(TabDestination::Node(target_path, TabInsert::Append)),
+                destination_identity: None,
                 unfold: None,
             },
             source,
@@ -1074,6 +1120,7 @@ mod tests {
                 stamp: 0,
                 rank: 0,
                 outcome: Outcome::Drop(TabDestination::Node(target_path, TabInsert::Append)),
+                destination_identity: None,
                 unfold: None,
             },
             source,
@@ -1124,6 +1171,7 @@ mod tests {
                     destination_path,
                     TabInsert::Append,
                 )),
+                destination_identity: None,
                 unfold: None,
             },
             session.payload,
@@ -1632,6 +1680,34 @@ mod tests {
             &mut viewer,
         ));
         assert_eq!(area.dock_state.leaf(root).unwrap().tabs, ["only"]);
+    }
+
+    #[test]
+    fn reported_leaf_destination_rejects_replacement_at_the_same_path() {
+        let mut dock = DockState::new(vec!["source", "original target"]);
+        let destination_path = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let mut area = DockArea::new(&mut dock);
+        let destination_identity = area
+            .dock_state
+            .leaf_mut(destination_path)
+            .unwrap()
+            .ensure_drag_identity();
+
+        assert!(area.reported_destination_identity_valid(
+            &TabDestination::Node(destination_path, TabInsert::Append),
+            Some(destination_identity),
+        ));
+
+        *area.dock_state.main_surface_mut() = crate::Tree::new(vec!["replacement target"]);
+
+        assert!(!area.reported_destination_identity_valid(
+            &TabDestination::Node(destination_path, TabInsert::Append),
+            Some(destination_identity),
+        ));
+        assert!(area.reported_destination_identity_valid(
+            &TabDestination::Node(destination_path, TabInsert::Append),
+            None,
+        ));
     }
 
     #[test]

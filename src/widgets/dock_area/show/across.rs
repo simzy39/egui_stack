@@ -758,6 +758,35 @@ mod tests {
     }
 
     #[test]
+    fn stale_group_cannot_move_a_replacement_leaf() {
+        let mut dock = DockState::new(vec!["original"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let mut viewer = Viewer { allow_windows: true };
+        let mut area = DockArea::new(&mut dock);
+        let source = area.group_drag_source(root).unwrap();
+
+        // The slot still exists, but it is no longer the leaf pressed by the user.
+        *area.dock_state.main_surface_mut() = crate::Tree::new(vec!["replacement"]);
+        let [replacement, destination] = area
+            .dock_state
+            .main_surface_mut()
+            .split_right(NodeIndex::root(), 0.5, vec!["destination"]);
+        let target = NodePath::new(SurfaceIndex::main(), destination);
+        assert!(!area.apply_move(
+            source,
+            TabDestination::Node(target, TabInsert::Append),
+            &mut viewer,
+        ));
+        assert_eq!(
+            area.dock_state[NodePath::new(SurfaceIndex::main(), replacement)]
+                .tabs()
+                .unwrap(),
+            &["replacement"]
+        );
+        assert_eq!(area.dock_state[target].tabs().unwrap(), &["destination"]);
+    }
+
+    #[test]
     fn group_identity_rejects_a_leaf_relocated_to_another_path() {
         let mut dock = DockState::new(vec!["original"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());

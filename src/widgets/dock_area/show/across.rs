@@ -2081,9 +2081,9 @@ mod tests {
         let area = DockArea::new(&mut dock);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
         let missing = NodePath::new(SurfaceIndex::main(), NodeIndex(100));
-        assert!(area.source_valid(&TreeComponent::Node(root)));
-        assert!(!area.source_valid(&TreeComponent::Node(missing)));
-        assert!(!area.source_valid(&TreeComponent::Tab((root, TabIndex(1)).into())));
+        assert!(area.component_exists(&TreeComponent::Node(root)));
+        assert!(!area.component_exists(&TreeComponent::Node(missing)));
+        assert!(!area.component_exists(&TreeComponent::Tab((root, TabIndex(1)).into())));
         assert!(
             area.destination_valid(&TabDestination::Node(root, TabInsert::Insert(TabIndex(1)),))
         );
@@ -2094,7 +2094,7 @@ mod tests {
         assert!(!area.destination_valid(&TabDestination::EmptySurface(SurfaceIndex::main())));
         let absent = SurfaceIndex(100);
         assert!(!area.destination_valid(&TabDestination::EmptySurface(absent)));
-        assert!(!area.source_valid(&TreeComponent::Node(NodePath::new(
+        assert!(!area.component_exists(&TreeComponent::Node(NodePath::new(
             absent,
             NodeIndex::root(),
         ))));

@@ -266,7 +266,8 @@ impl BodyLeaf {
         if stored_pass != pass || source.component() != drag_and_drop::TreeComponent::Node(path) {
             return None;
         }
-        data.remove_temp::<(u64, Option<DragSource>, Id)>(key);
+        // Clear the consumed request without requiring a Default for egui::Id.
+        data.insert_temp(key, (0_u64, None::<DragSource>, widget));
         Some((source, widget))
     }
 

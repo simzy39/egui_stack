@@ -342,7 +342,9 @@ impl<Tab> DockState<Tab> {
     /// Whether a destination can accept a move without clamping a stale tab index.
     pub(crate) fn valid_move_destination(&self, destination: &TabDestination) -> bool {
         match *destination {
-            TabDestination::Node(path, TabInsert::Split(_)) => self.node(path).is_ok(),
+            TabDestination::Node(path, TabInsert::Split(_)) => self
+                .node(path)
+                .is_ok_and(|node| !node.is_empty()),
             TabDestination::Node(path, TabInsert::Insert(index)) => self
                 .leaf(path)
                 .is_ok_and(|leaf| index.0 <= leaf.tabs.len()),
@@ -1042,6 +1044,18 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn splitting_an_empty_node_is_rejected_without_removing_source() {
+        let mut dock = DockState::new(vec!["first", "second"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let missing = NodePath::new(SurfaceIndex::main(), NodeIndex(999));
+        assert!(!dock.move_tab(
+            TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(0)),
+            TabDestination::Node(missing, TabInsert::Split(crate::Split::Right)),
+        ));
+        assert_eq!(dock.leaf(root).unwrap().tabs, ["first", "second"]);
+    }
 
     #[test]
     fn splitting_ancestor_of_source_keeps_other_branches() {

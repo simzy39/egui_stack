@@ -8,7 +8,7 @@ static NEXT_CONTAINER_DRAG_ID: AtomicU64 = AtomicU64::new(1);
 
 pub(super) fn allocate_container_drag_identity() -> u64 {
     NEXT_CONTAINER_DRAG_ID
-        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |next| {
+        .try_update(Ordering::Relaxed, Ordering::Relaxed, |next| {
             (next != 0).then(|| next.checked_add(1)).flatten()
         })
         .unwrap_or_else(|_| panic!("container drag identity exhausted"))

@@ -248,7 +248,7 @@ impl<Tab> DockState<Tab> {
         if *identity == 0 {
             static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
             *identity = NEXT
-                .fetch_update(
+                .try_update(
                     std::sync::atomic::Ordering::Relaxed,
                     std::sync::atomic::Ordering::Relaxed,
                     |next| (next != 0).then(|| next.checked_add(1)).flatten(),
@@ -626,7 +626,7 @@ impl<Tab> DockState<Tab> {
     /// Returns false without changing the tree when the move is invalid or a no-op.
     pub fn move_tab(&mut self, src: TabPath, dst_tab: impl Into<TabDestination>) -> bool {
         let destination = dst_tab.into();
-        if self.leaf(src.node_path()).is_err_or(|leaf| src.tab.0 >= leaf.tabs.len()) {
+        if self.leaf(src.node_path()).map_or(true, |leaf| src.tab.0 >= leaf.tabs.len()) {
             return false;
         }
         if self.tab_move_is_noop(src, &destination) {

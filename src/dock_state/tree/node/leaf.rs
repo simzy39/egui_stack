@@ -60,7 +60,7 @@ impl<Tab: Clone> Clone for LeafNode<Tab> {
 
 fn allocate_drag_identity(counter: &AtomicU64) -> u64 {
     counter
-        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |next| {
+        .try_update(Ordering::Relaxed, Ordering::Relaxed, |next| {
             (next != 0).then(|| next.checked_add(1)).flatten()
         })
         .unwrap_or_else(|_| panic!("leaf drag identity exhausted"))

@@ -1727,7 +1727,7 @@ mod detach_tests {
         // neighbour disappears. The surviving neighbour remains authoritative.
         let first = space.dock("editor").unwrap().find_tab(&"first").unwrap();
         let surface = space.dock_surface("editor").unwrap();
-        space.state.remove_tab(TabPath::new(surface, first.node, first.tab)).unwrap();
+        space.state.remove_tab(TabPath::new(surface, first.0, first.1)).unwrap();
         assert_eq!(space.restore_at(tab, place, id).unwrap(), "editor");
         let tree = space.dock("editor").unwrap();
         let root = tree.leaf(NodeIndex::root()).unwrap();

@@ -29,6 +29,14 @@ use crate::{
     Tree,
 };
 
+/// A destination that has passed structural validation. The insertion index is
+/// resolved against the pre-move tree, so the commit phase never clamps a stale
+/// destination or revalidates against an already detached source.
+struct PreparedDestination {
+    destination: TabDestination,
+    insertion: Option<usize>,
+}
+
 /// The heart of `egui_stack`.
 ///
 /// This structure holds a collection of surfaces, each of which stores a tree in which tabs are arranged.
@@ -464,6 +472,34 @@ impl<Tab> DockState<Tab> {
         }
     }
 
+    /// Resolve the entire destination before removing a source tab or leaf.
+    /// The returned plan is consumed immediately; it must not survive an
+    /// intervening mutation of the dock tree.
+    fn prepare_destination(
+        &self,
+        destination: TabDestination,
+        source_tab: Option<TabPath>,
+    ) -> Option<PreparedDestination> {
+        if !self.valid_move_destination(&destination) {
+            return None;
+        }
+        let insertion = match &destination {
+            TabDestination::Node(path, TabInsert::Insert(index)) => {
+                let preceding_source = source_tab.is_some_and(|source| {
+                    source.node_path() == *path && source.tab.0 < index.0
+                });
+                Some(index.0 - usize::from(preceding_source))
+            }
+            TabDestination::Node(path, TabInsert::Append) => {
+                let count = self.leaf(*path).ok()?.tabs.len();
+                let same_leaf = source_tab.is_some_and(|source| source.node_path() == *path);
+                Some(count - usize::from(same_leaf))
+            }
+            _ => None,
+        };
+        Some(PreparedDestination { destination, insertion })
+    }
+
     /// Moves a whole leaf, all its tabs in their order, as a tab is moved: into another leaf's
     /// tabs ([`TabInsert::Insert`] at an index, [`TabInsert::Append`] after them), beside a leaf
     /// ([`TabInsert::Split`]), into an empty surface, or into a new window. The leaf's active tab
@@ -485,22 +521,18 @@ impl<Tab> DockState<Tab> {
     /// ```
     pub fn move_node(&mut self, src: NodePath, dst: impl Into<TabDestination>) -> bool {
         let dst = dst.into();
-        // Validate both endpoints before removing anything from the source.
-        if !self.valid_move_destination(&dst) {
-            return false;
-        }
-        if matches!(dst, TabDestination::Node(d, _) if d == src) {
-            return false;
-        }
+        // Preflight source and destination before touching either tree.
         let Ok(leaf) = self.leaf(src) else {
             return false;
         };
-        if leaf.tabs.is_empty() {
+        if leaf.tabs.is_empty() || matches!(dst, TabDestination::Node(d, _) if d == src) {
             return false;
         }
-        // valid_move_destination already verifies the destination leaf.
-        // No tree mutation occurs between validation and the move.
-        let leaf = self.leaf_mut(src).expect("validated source leaf");
+        let Some(plan) = self.prepare_destination(dst, None) else {
+            return false;
+        };
+        let PreparedDestination { destination: dst, insertion } = plan;
+        let leaf = self.leaf_mut(src).expect("preflighted source leaf");
         let active = leaf.active.0.min(leaf.tabs.len() - 1);
         let tabs = std::mem::take(&mut leaf.tabs);
         // Splitting the root relocates its old contents into a child. If
@@ -535,10 +567,7 @@ impl<Tab> DockState<Tab> {
                 }
                 TabInsert::Insert(_) | TabInsert::Append => {
                     let leaf = self.leaf_mut(d).expect("validated destination leaf");
-                    let at = match insert {
-                        TabInsert::Insert(i) => i.0.min(leaf.tabs.len()),
-                        _ => leaf.tabs.len(),
-                    };
+                    let at = insertion.expect("preflighted group insertion");
                     leaf.tabs.splice(at..at, tabs);
                     leaf.active = TabIndex(at + active);
                 }
@@ -600,9 +629,13 @@ impl<Tab> DockState<Tab> {
         if self.leaf(src.node_path()).is_err_or(|leaf| src.tab.0 >= leaf.tabs.len()) {
             return false;
         }
-        if !self.valid_move_destination(&destination) || self.tab_move_is_noop(src, &destination) {
+        if self.tab_move_is_noop(src, &destination) {
             return false;
         }
+        let Some(plan) = self.prepare_destination(destination, Some(src)) else {
+            return false;
+        };
+        let PreparedDestination { destination, insertion } = plan;
         // Splitting the root relocates its old leaf to a newly allocated node.
         // Track that relocation so cleanup never targets the new container.
         let mut cleanup_source = src.node_path();
@@ -621,17 +654,10 @@ impl<Tab> DockState<Tab> {
                             cleanup_source.node = old_node;
                         }
                     }
-                    TabInsert::Insert(index) => {
-                        // Insertion indices describe the destination before removal.
-                        // Removing an earlier tab shifts later slots left by one.
-                        let insertion = if src.node_path() == dst && src.tab.0 < index.0 {
-                            index.0 - 1
-                        } else {
-                            index.0
-                        };
-                        self[dst.surface][dst.node].insert_tab(TabIndex(insertion), tab);
+                    TabInsert::Insert(_) | TabInsert::Append => {
+                        let at = insertion.expect("preflighted tab insertion");
+                        self[dst.surface][dst.node].insert_tab(TabIndex(at), tab);
                     }
-                    TabInsert::Append => self[dst.surface][dst.node].append_tab(tab),
                 }
             }
             TabDestination::EmptySurface(dst_surface) => {

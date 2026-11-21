@@ -249,6 +249,22 @@ impl BodyLeaf {
         }
     }
 
+    /// Take only this leaf's current-pass request. A different leaf cannot consume it.
+    fn take_request_for_leaf(
+        data: &mut egui::util::IdTypeMap,
+        key: Id,
+        pass: u64,
+        path: NodePath,
+    ) -> Option<(DragSource, Id)> {
+        let pending = data.get_temp::<(u64, Option<DragSource>, Id)>(key)?;
+        let (stored_pass, source, widget) = pending;
+        if stored_pass != pass || source?.component() != drag_and_drop::TreeComponent::Node(path) {
+            return None;
+        }
+        data.remove_temp::<(u64, Option<DragSource>, Id)>(key);
+        Some((source?, widget))
+    }
+
     fn id() -> Id {
         Id::unique("egui_stack::BodyLeaf")
     }
@@ -266,6 +282,27 @@ impl BodyLeaf {
 #[cfg(test)]
 mod custom_handle_request_tests {
     use super::*;
+
+    #[test]
+    fn only_the_matching_leaf_can_consume_a_current_pass_request() {
+        use crate::{NodeIndex, SurfaceIndex};
+        let ctx = Context::default();
+        let key = BodyLeaf::request_id(Id::new("dock"));
+        let left = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
+        let right = NodePath::new(SurfaceIndex::main(), NodeIndex(2));
+        let source = DragSource::Group { path: left, id: 37 };
+        let handle = Id::new("left-handle");
+        ctx.data_mut(|data| {
+            BodyLeaf::retain_first_request(data, key, 20, (Some(source), handle));
+            assert_eq!(BodyLeaf::take_request_for_leaf(data, key, 20, right), None);
+            assert_eq!(BodyLeaf::take_request_for_leaf(data, key, 21, left), None);
+            assert_eq!(
+                BodyLeaf::take_request_for_leaf(data, key, 20, left),
+                Some((source, handle))
+            );
+            assert_eq!(BodyLeaf::take_request_for_leaf(data, key, 20, left), None);
+        });
+    }
 
     #[test]
     fn competing_handles_preserve_first_request_within_pass() {

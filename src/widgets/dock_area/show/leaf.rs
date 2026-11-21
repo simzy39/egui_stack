@@ -189,20 +189,14 @@ impl<Tab> DockArea<'_, Tab> {
 
         // Body handles report their press separately from drag activation.
         let press_request = BodyLeaf::press_id(self.id);
-        if let Some((_, Some(source), handle_id)) =
-            ui.data_mut(|d| {
-                let request = d.get_temp::<(u64, Option<DragSource>, Id)>(press_request);
-                if request.is_some_and(|(pass, source, _)| {
-                    pass == ui.ctx().cumulative_pass_nr()
-                        && source.is_some_and(|source| {
-                            source.component() == TreeComponent::Node(path)
-                        })
-                }) {
-                    d.remove_temp::<(u64, Option<DragSource>, Id)>(press_request)
-                } else {
-                    None
-                }
-            })
+        if let Some((source, handle_id)) = ui.data_mut(|d| {
+            BodyLeaf::take_request_for_leaf(
+                d,
+                press_request,
+                ui.ctx().cumulative_pass_nr(),
+                path,
+            )
+        })
             && self.draggable_tabs
             && ui.input(|i| i.pointer.primary_down())
             && state.group_press.is_none()
@@ -224,20 +218,9 @@ impl<Tab> DockArea<'_, Tab> {
         }
         // A handle of the body (`DockArea::drag_group_by`) asked to drag the group.
         let request = BodyLeaf::request_id(self.id);
-        if let Some((_, Some(source), handle_id)) =
-            ui.data_mut(|d| {
-                let pending = d.get_temp::<(u64, Option<DragSource>, Id)>(request);
-                if pending.is_some_and(|(pass, source, _)| {
-                    pass == ui.ctx().cumulative_pass_nr()
-                        && source.is_some_and(|source| {
-                            source.component() == TreeComponent::Node(path)
-                        })
-                }) {
-                    d.remove_temp::<(u64, Option<DragSource>, Id)>(request)
-                } else {
-                    None
-                }
-            })
+        if let Some((source, handle_id)) = ui.data_mut(|d| {
+            BodyLeaf::take_request_for_leaf(d, request, ui.ctx().cumulative_pass_nr(), path)
+        })
             && self.draggable_tabs
         {
             // A later drag request cannot target a replacement leaf or a

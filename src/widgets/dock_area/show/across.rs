@@ -127,7 +127,7 @@ impl<Tab> DockArea<'_, Tab> {
                 }
                 return Across::Here;
             }
-            let (src, size, tab_id) = (session.payload.component(), session.rect.size(), session.payload.tab_id());
+            let (source, size) = (session.payload, session.rect.size());
             // Released outside, where no viewport could tell the pointer was over it: the first
             // that sees it over one of its docks within a few passes takes it.
             let wait = remote.is_none() && session.outside && session.desktop.is_none() && others;
@@ -143,7 +143,7 @@ impl<Tab> DockArea<'_, Tab> {
                 return Across::Here;
             };
             let rect = Rect::from_min_size(local, size);
-            self.release_over(report, src, rect, tab_id, tab_viewer);
+            self.release_over(report, source, rect, tab_viewer);
             state.reset_drag();
             state.dnd = None;
             self.forget_verdicts();
@@ -161,13 +161,12 @@ impl<Tab> DockArea<'_, Tab> {
             return match session.released {
                 Some(0) => {
                     // Nobody took it: as over nothing, a new float.
-                    let (src, rect, tab_id) = (
-                        session.payload.component(),
+                    let (source, rect) = (
+                        session.payload,
                         Rect::from_min_size(session.local, session.rect.size()),
-                        session.payload.tab_id(),
                     );
                     space.floating.session = None;
-                    self.release_free(src, rect, tab_id, tab_viewer);
+                    self.release_free(source, rect, tab_viewer);
                     self.forget_verdicts();
                     Across::Done
                 }
@@ -212,16 +211,15 @@ impl<Tab> DockArea<'_, Tab> {
             }
             return Across::Done;
         };
-        let (src, rect, tab_id, take) = (
-            session.payload.component(),
+        let (source, rect, take) = (
+            session.payload,
             session.rect,
-            session.payload.tab_id(),
             session.released.is_some(),
         );
         state.remote = true;
         state.last_hover_pos = Some(pointer);
         state.drag_start.get_or_insert(pointer);
-        *drag_data = DragSource::from_parts(src, tab_id).map(|source| DragData { source, rect });
+        *drag_data = Some(DragData { source, rect });
         ctx.request_repaint();
         Across::Remote { take }
     }
@@ -274,7 +272,7 @@ impl<Tab> DockArea<'_, Tab> {
             );
             return;
         }
-        let (src, rect, tab_id) = (session.payload.component(), session.rect, session.payload.tab_id());
+        let (source, rect) = (session.payload, session.rect);
         match outcome {
             // Over none of its docks: another viewport may still take it.
             Outcome::Free => return,
@@ -287,7 +285,7 @@ impl<Tab> DockArea<'_, Tab> {
             outcome,
             unfold,
         };
-        self.release_over(report, src, rect, tab_id, tab_viewer);
+        self.release_over(report, source, rect, tab_viewer);
         Self::idle(state);
         self.forget_verdicts();
         ui.ctx().request_repaint();
@@ -298,14 +296,14 @@ impl<Tab> DockArea<'_, Tab> {
     fn release_over(
         &mut self,
         report: Report,
-        src: TreeComponent,
+        source: DragSource,
         rect: Rect,
-        tab_id: Option<Id>,
         tab_viewer: &mut impl TabViewer<Tab = Tab>,
     ) {
-        if !DragSource::from_parts(src.clone(), tab_id).is_some_and(|source| self.drag_source_valid(source, tab_viewer)) {
+        if !self.drag_source_valid(source, tab_viewer) {
             return;
         }
+        let src = source.component();
         match report.outcome {
             Outcome::Drop(destination) => {
                 if !self.destination_valid(&destination) {
@@ -347,7 +345,7 @@ impl<Tab> DockArea<'_, Tab> {
                 }
             }
             Outcome::Refused => {}
-            Outcome::Free => self.release_free(src, rect, tab_id, tab_viewer),
+            Outcome::Free => self.release_free(source, rect, tab_viewer),
         }
     }
 
@@ -355,14 +353,14 @@ impl<Tab> DockArea<'_, Tab> {
     /// float and the veto allows it; else it stays where it was.
     fn release_free(
         &mut self,
-        src: TreeComponent,
+        source: DragSource,
         rect: Rect,
-        tab_id: Option<Id>,
         tab_viewer: &mut impl TabViewer<Tab = Tab>,
     ) {
-        if !self.floats_on() || !DragSource::from_parts(src.clone(), tab_id).is_some_and(|source| self.drag_source_valid(source, tab_viewer)) {
+        if !self.floats_on() || !self.drag_source_valid(source, tab_viewer) {
             return;
         }
+        let src = source.component();
         let may = match src {
             TreeComponent::Tab(path) => self.may_float(path, tab_viewer),
             TreeComponent::Node(path) => self.node_may_float(path, tab_viewer),
@@ -378,9 +376,7 @@ impl<Tab> DockArea<'_, Tab> {
                 .refusal_of(&src, tab_viewer, &destination, true)
                 .is_none()
         {
-            if let Some(pending) = PendingFloat::from_drag(src, rect, Some(host), tab_id) {
-                self.to_float.push(pending);
-            }
+            self.to_float.push(PendingFloat { source, rect, host: Some(host) });
         }
     }
 
@@ -666,9 +662,8 @@ mod tests {
                         )),
                         unfold: None,
                     },
-                    src,
+                    DragSource::from_parts(src, (!group).then(|| Id::unique("restricted"))).unwrap(),
                     rect,
-                    (!group).then(|| Id::unique("restricted")),
                     &mut viewer,
                 );
                 let tabs = area.dock_state[NodePath::new(target, NodeIndex::root())]

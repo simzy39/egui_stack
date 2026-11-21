@@ -461,9 +461,20 @@ impl<Tab> DockState<Tab> {
                 return true;
             }
             TabDestination::Node(dst, dst_tab) => {
-                // Moving a single tab inside its own node is a no-op
-                if src.node_path() == dst && self[src.node_path()].tabs_count() == 1 {
-                    return false;
+                if src.node_path() == dst {
+                    let count = self[src.node_path()].tabs_count();
+                    // Insertion positions refer to the pre-removal leaf. Reject
+                    // moves that leave the order unchanged, including a sole tab.
+                    let unchanged = match dst_tab {
+                        TabInsert::Insert(index) => {
+                            index.0 == src.tab.0 || index.0 == src.tab.0 + 1
+                        }
+                        TabInsert::Append => src.tab.0 + 1 == count,
+                        TabInsert::Split(_) => count == 1,
+                    };
+                    if unchanged {
+                        return false;
+                    }
                 }
 
                 // Call `Node::remove_tab` to avoid auto remove of the node by `Tree::remove_tab` from Tree.

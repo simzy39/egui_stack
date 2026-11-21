@@ -946,7 +946,7 @@ mod tests {
             panic!("expected group source");
         };
 
-        let mut render = |events: Vec<Event>, dock: &mut DockState<&'static str>| {
+        let render = |events: Vec<Event>, dock: &mut DockState<&'static str>| {
             let input = RawInput {
                 events,
                 screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(800.0, 600.0))),

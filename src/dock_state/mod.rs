@@ -674,12 +674,17 @@ impl<Tab> DockState<Tab> {
         Some(removed_tab)
     }
 
-    /// Removes a leaf at the specified `path`.
-    pub fn remove_leaf(&mut self, path: NodePath) {
+    /// Removes a leaf at `path`, returning whether a leaf was removed.
+    /// Invalid paths and non-leaf nodes leave the tree unchanged.
+    pub fn remove_leaf(&mut self, path: NodePath) -> bool {
+        if self.leaf(path).is_err() {
+            return false;
+        }
         self[path.surface].remove_leaf(path.node);
         if self.is_window(path.surface) && self[path.surface].is_empty() {
             self.remove_surface(path.surface);
         }
+        true
     }
 
     /// Creates two new nodes by splitting a given `parent` node and assigns them as its children. The first (old) node
@@ -1073,6 +1078,25 @@ mod test {
             assert_eq!(dock.leaf(root).unwrap().tabs, ["first", "second"]);
             assert_eq!(dock.focused_leaf(), focus);
         }
+    }
+
+    #[test]
+    fn invalid_leaf_removal_preserves_tree_and_surfaces() {
+        let mut dock = DockState::new(vec!["first", "second"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let before = dock.surfaces.len();
+        assert!(!dock.remove_leaf(NodePath::new(
+            SurfaceIndex::main(),
+            NodeIndex(999),
+        )));
+        assert!(!dock.remove_leaf(NodePath::new(
+            SurfaceIndex(999),
+            NodeIndex::root(),
+        )));
+        assert_eq!(dock.surfaces.len(), before);
+        assert_eq!(dock.leaf(root).unwrap().tabs, ["first", "second"]);
+        assert!(dock.remove_leaf(root));
+        assert!(dock.get_surface(SurfaceIndex::main()).is_some());
     }
 
     #[test]

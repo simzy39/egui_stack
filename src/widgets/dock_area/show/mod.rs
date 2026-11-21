@@ -175,7 +175,11 @@ impl<Tab> DockArea<'_, Tab> {
                         host: None,
                     });
                 }
-                destination => self.dock_state.move_node(path, destination),
+                destination => {
+                    // Menu-initiated moves are deferred too: validate their paths before
+                    // mutating the tree, just as for drag-and-drop releases.
+                    self.apply_move(DragSource::Group(path), destination, tab_viewer);
+                }
             }
         }
 

@@ -641,7 +641,10 @@ impl<Tab> DockState<Tab> {
         let mut cleanup_source = src.node_path();
         match destination {
             TabDestination::Window(position) => {
-                return self.detach_tab(src, position).is_some();
+                // The window destination and source tab were already checked
+                // during preflight. Do not run a second, divergent move path.
+                self.commit_detach_tab(src, position);
+                return true;
             }
             TabDestination::Node(dst, dst_tab) => {
                 // Call `Node::remove_tab` to avoid auto remove of the node by `Tree::remove_tab` from Tree.
@@ -773,15 +776,17 @@ impl<Tab> DockState<Tab> {
     /// Takes a tab out of its current surface and puts it in a new window.
     /// Returns the new window's surface index, or `None` if the source tab is invalid.
     pub fn detach_tab(&mut self, src: TabPath, window_rect: Rect) -> Option<SurfaceIndex> {
-        if !self.valid_move_destination(&TabDestination::Window(window_rect)) {
-            return None;
-        }
-        self.leaf(src.node_path())
-            .ok()?
-            .tabs
-            .get(src.tab.0)?;
-        // Keep the source leaf in place until the destination has received the tab.
-        let tab = self[src.node_path()].remove_tab(src.tab)?;
+        self.leaf(src.node_path()).ok()?.tabs.get(src.tab.0)?;
+        self.prepare_destination(TabDestination::Window(window_rect), Some(src))?;
+        Some(self.commit_detach_tab(src, window_rect))
+    }
+
+    /// Commit a fully preflighted tab detachment. No fallible lookups occur
+    /// after the source tab is removed.
+    fn commit_detach_tab(&mut self, src: TabPath, window_rect: Rect) -> SurfaceIndex {
+        let tab = self[src.node_path()]
+            .remove_tab(src.tab)
+            .expect("preflighted source tab");
         let surface_index = self.add_window(vec![tab]);
 
         // Set the window size and position to match `window_rect`.
@@ -796,7 +801,7 @@ impl<Tab> DockState<Tab> {
 
         // Clean up any empty leaves and surfaces which may be left behind from the detachment.
         self.cleanup_moved_source(src.node_path());
-        Some(surface_index)
+        surface_index
     }
 
     /// Returns the currently focused leaf if there is one.

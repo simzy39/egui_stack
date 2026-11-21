@@ -6,7 +6,9 @@ use egui::{
 };
 
 use super::{
-    drag_and_drop::{DragSource, DragData, DragDropState, HoverData, TreeComponent, make_overlay_painter},
+    drag_and_drop::{
+        DragData, DragDropState, DragSource, HoverData, TreeComponent, make_overlay_painter,
+    },
     session::Outcome,
     PendingFloat,
     state::State,
@@ -452,22 +454,22 @@ impl<Tab> DockArea<'_, Tab> {
             if remote {
                 outcome = Some(tab_dst.map_or(Outcome::Refused, Outcome::Drop));
             } else if released && let Some(destination) = tab_dst {
-                // Dropped on a folded zone's strip, or a collapsed zone's restore band: the zone
-                // is to unfold.
-                if let (Some(zone), Some(space)) = (unfold.clone(), &mut self.space) {
-                    space.no_drop.unfolds.push(zone);
-                }
                 let drag = &state.dnd.as_ref().unwrap().drag;
                 let source = drag.source;
-                match destination {
+                let moved = match destination {
                     // Out of every dock, once the space's floats are drawn: a float.
                     TabDestination::Window(rect) if self.floats_on() => {
                         let host = self.release_host(rect.min);
                         self.to_float.push(PendingFloat { source, rect, host });
+                        true
                     }
-                    destination => {
-                        self.apply_move(source, destination, tab_viewer);
-                    }
+                    destination => self.apply_move(source, destination, tab_viewer),
+                };
+                // A stale source or destination must not unfold a zone on a rejected drop.
+                if moved
+                    && let (Some(zone), Some(space)) = (unfold.clone(), &mut self.space)
+                {
+                    space.no_drop.unfolds.push(zone);
                 }
                 ui.ctx().request_repaint();
             }

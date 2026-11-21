@@ -511,7 +511,7 @@ impl<Tab> DockArea<'_, Tab> {
     }
 
     /// Capture a node's stable runtime identity when a destination is reported.
-    fn capture_destination_identity(
+    pub(super) fn capture_destination_identity(
         &mut self,
         path: crate::NodePath,
     ) -> Option<DestinationIdentity> {
@@ -531,7 +531,10 @@ impl<Tab> DockArea<'_, Tab> {
     }
 
     /// Read a node's identity without assigning one to a replacement.
-    fn current_destination_identity(&self, path: crate::NodePath) -> Option<DestinationIdentity> {
+    pub(super) fn current_destination_identity(
+        &self,
+        path: crate::NodePath,
+    ) -> Option<DestinationIdentity> {
         let node = self.dock_state.node(path).ok()?;
         if let Some(leaf) = node.get_leaf() {
             return (leaf.drag_identity != 0)
@@ -616,7 +619,7 @@ impl<Tab> DockArea<'_, Tab> {
 
     /// A positional insertion is valid only against the tab order it was previewed in.
     /// Append and split operations do not depend on an existing insertion index.
-    fn reported_insertion_order_valid(
+    pub(super) fn reported_insertion_order_valid(
         &mut self,
         destination: &TabDestination,
         reported: Option<&[egui::Id]>,

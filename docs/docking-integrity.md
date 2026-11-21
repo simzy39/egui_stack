@@ -41,6 +41,7 @@ copy is needed.
 | Retained tab source | Original path, logical tab ID and runtime leaf identity must all match. |
 | Retained group source | Original path and runtime leaf identity must match; the group carries its current members. |
 | Retained destination | Surface snapshot and node identity must match; numeric insertion also requires the same unique, ordered tab IDs. |
+| Local cached hover | Node identity must match, or the surface snapshot for an empty target; numeric insertion requires the same tab order. |
 | Standalone window | Runtime window identity is independent of its surface slot and tree shape, and scoped to its DockArea. |
 
 Runtime identities share one non-recycling allocator. Zero is unassigned; exhaustion
@@ -65,7 +66,8 @@ cannot take over the existing owner. A DockSpace has one active drag session;
 remote reports expire after the current or preceding source pass, and reports
 from the source viewport or a future pass are refused. Rebuilding a space discards
 target reports and deferred releases. Closing a participating viewport retires or
-cancels its session.
+cancels its session. Target viewports retain remote gesture state between their
+named docks even though only the source viewport receives the held button.
 
 Release checks the retained source and target again before applying the model
 operation. Failed commits leave origins, events and drop-zone state alone.

@@ -2629,17 +2629,21 @@ impl<Tab> DockArea<'_, Tab> {
                     }
                 };
 
+                let mut hover = HoverData {
+                    identity: None,
+                    surface_identity: None,
+                    insertion_order: None,
+                    rect,
+                    dst,
+                    tab,
+                    tab_bar: Some(tabbar_rect),
+                    outside: false,
+                };
+                self.capture_hover(&mut hover, tab_viewer);
+
                 ui.memory_mut(|mem| {
-                    mem.data.insert_temp(
-                        self.id.with("hover_data"),
-                        Some(HoverData {
-                            rect,
-                            dst,
-                            tab,
-                            tab_bar: Some(tabbar_rect),
-                            outside: false,
-                        }),
-                    );
+                    mem.data
+                        .insert_temp(self.id.with("hover_data"), Some(hover));
                 });
             }
         }

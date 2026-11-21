@@ -147,6 +147,27 @@ fn the_hovered_leaf_removed_mid_drag() {
     assert_eq!(left, ["First", "Second"]);
 }
 
+#[test]
+#[cfg_attr(miri, ignore = "drives a whole UI; too slow under Miri")]
+fn replaced_destination_cannot_inherit_a_cached_drop_on_release() {
+    let mut harness = harness();
+    let target = drag_first_over_right_leaf(&mut harness);
+    let right = NodePath::new(SurfaceIndex::main(), NodeIndex(2));
+    *harness.state_mut().leaf_mut(right).unwrap() =
+        egui_stack::LeafNode::new(vec!["Replacement".to_owned()]);
+    harness.drop_at(target);
+    harness.run_steps(5);
+    assert_eq!(harness.state().leaf(right).unwrap().tabs(), ["Replacement"]);
+    assert_eq!(
+        harness
+            .state()
+            .leaf(NodePath::new(SurfaceIndex::main(), NodeIndex(1)))
+            .unwrap()
+            .tabs(),
+        ["First", "Second"]
+    );
+}
+
 /// The application may leave the path valid while changing which tab occupies it.
 #[test]
 #[cfg_attr(miri, ignore = "drives a whole UI; too slow under Miri")]

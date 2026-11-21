@@ -238,7 +238,7 @@ impl<Tab> DockArea<'_, Tab> {
             remove_empty_docks(self.dock_state, space.docks);
         }
 
-        if !ui.input(|i| i.pointer.primary_down()) {
+        if !state.remote && !ui.input(|i| i.pointer.primary_down()) {
             // A click which never became a drag still ends the gesture. In
             // particular, do not carry its modifier choice into the next press.
             state.finish_drag();
@@ -381,12 +381,13 @@ impl<Tab> DockArea<'_, Tab> {
             self.forget_verdicts();
         }
         if state.dnd.as_ref().is_some_and(|dnd| {
-            !self.drag_source_valid(dnd.drag.source, tab_viewer) || !self.hover_valid(&dnd.hover)
+            !self.drag_source_valid(dnd.drag.source, tab_viewer)
+                || !self.hover_valid(&dnd.hover, tab_viewer)
         }) {
             state.dnd = None;
             state.window_fade = None;
         }
-        let hover_data = hover_data.filter(|hover| self.hover_valid(hover));
+        let hover_data = hover_data.filter(|hover| self.hover_valid(hover, tab_viewer));
 
         // The tab whose drag began here: its ghost follows the pointer, even over another
         // viewport, so it stays out of its bar.
@@ -460,16 +461,22 @@ impl<Tab> DockArea<'_, Tab> {
             &restores,
             self.style.as_ref().unwrap().overlay.feel.restore_band,
         );
-        let restore = drag_data
+        let mut restore = drag_data
             .as_ref()
             .and_then(|_| self.hover_restore(state, &restores, &bands));
         if drag_data.is_some() {
             self.paint_restore_bands(ui, &restores, &bands, restore.as_ref().map(|r| r.2));
         }
-        let strip = drag_data
+        if let Some((hover, _, _)) = restore.as_mut() {
+            self.capture_hover(hover, tab_viewer);
+        }
+        let mut strip = drag_data
             .as_ref()
             .filter(|_| restore.is_none())
             .and_then(|_| self.hover_strip(state));
+        if let Some((hover, _, _)) = strip.as_mut() {
+            self.capture_hover(hover, tab_viewer);
+        }
         let preview = restore.as_ref().map(|(_, _, i)| restores[*i].restore.rect);
         let drop_zone = match &restore {
             Some((_, zone, i)) => Some((restores[*i].dock.clone(), zone.clone())),
@@ -811,6 +818,9 @@ impl<Tab> DockArea<'_, Tab> {
         let dst = self.dock_target(name)?;
         Some((
             HoverData {
+                identity: None,
+                surface_identity: None,
+                insertion_order: None,
                 rect: *strip,
                 dst,
                 // As a tab bar: the tab joins the leaf, with no split.
@@ -864,6 +874,9 @@ impl<Tab> DockArea<'_, Tab> {
         let band = bands[index];
         Some((
             HoverData {
+                identity: None,
+                surface_identity: None,
+                insertion_order: None,
                 rect: band,
                 dst,
                 tab: Some(band),
@@ -935,13 +948,56 @@ impl<Tab> DockArea<'_, Tab> {
         allowed.then_some(destination)
     }
 
-    /// Whether a cached hover still refers to an existing target.
-    fn hover_valid(&self, hover: &HoverData) -> bool {
-        hover.outside
-            || match hover.dst {
-                TreeComponent::Tab(_) => self.component_exists(&hover.dst),
-                _ => self.destination_valid(&hover.dst.as_tab_destination()),
+    /// Snapshot the component behind cached geometry, before the next frame
+    /// can replace a leaf or change a numeric insertion's meaning.
+    fn capture_hover(&mut self, hover: &mut HoverData, viewer: &mut impl TabViewer<Tab = Tab>) {
+        match hover.dst {
+            TreeComponent::Node(_) | TreeComponent::Tab(_) => {
+                let path = match hover.dst {
+                    TreeComponent::Node(path) => path,
+                    TreeComponent::Tab(path) => path.node_path(),
+                    _ => unreachable!(),
+                };
+                hover.identity = self.capture_destination_identity(path);
+                if matches!(hover.dst, TreeComponent::Tab(_)) {
+                    hover.insertion_order = self
+                        .dock_state
+                        .leaf_for_ui(path)
+                        .ok()
+                        .map(|leaf| leaf.tabs.iter_mut().map(|tab| viewer.id(tab)).collect());
+                }
             }
+            TreeComponent::Surface(surface) => {
+                hover.surface_identity = self.dock_state.capture_surface_identity(surface);
+            }
+        }
+    }
+
+    fn hover_valid(&mut self, hover: &HoverData, viewer: &mut impl TabViewer<Tab = Tab>) -> bool {
+        if hover.outside {
+            return true;
+        }
+        let destination = hover.dst.as_tab_destination();
+        let identity_valid = match hover.dst {
+            TreeComponent::Node(path) => {
+                self.current_destination_identity(path) == hover.identity
+                    && hover.identity.is_some()
+            }
+            TreeComponent::Tab(path) => {
+                self.current_destination_identity(path.node_path()) == hover.identity
+                    && hover.identity.is_some()
+                    && self.reported_insertion_order_valid(
+                        &destination,
+                        hover.insertion_order.as_deref(),
+                        viewer,
+                    )
+            }
+            TreeComponent::Surface(surface) => {
+                hover.surface_identity.is_some()
+                    && self.dock_state.current_surface_identity(surface) == hover.surface_identity
+            }
+        };
+        identity_valid && self.destination_valid(&destination)
     }
 
     /// The viewer's veto for the dragged tab at `destination`; for a whole leaf, for each of its
@@ -1104,6 +1160,9 @@ impl<Tab> DockArea<'_, Tab> {
                 .filter_map(|&surface| self.dock_state.get_window_state(surface))
                 .any(|window| window.rect().contains(pointer));
         (!in_a_dock && !over_a_window).then_some(HoverData {
+            identity: None,
+            surface_identity: None,
+            insertion_order: None,
             rect: Rect::NOTHING,
             dst: TreeComponent::Surface(SurfaceIndex::main()),
             tab: None,

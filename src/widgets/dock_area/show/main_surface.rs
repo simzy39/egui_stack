@@ -28,17 +28,21 @@ impl<Tab> DockArea<'_, Tab> {
                 .last_hover_pos
                 .is_some_and(|pos| self.covered_by_window(ui, pos));
             if (response.contains_pointer() || hovered_by_drag) && !covered {
+                let mut hover = HoverData {
+                    identity: None,
+                    surface_identity: None,
+                    insertion_order: None,
+                    rect,
+                    dst: TreeComponent::Surface(surf_index),
+                    tab: None,
+                    tab_bar: None,
+                    outside: false,
+                };
+                self.capture_hover(&mut hover, tab_viewer);
+
                 ui.memory_mut(|mem| {
-                    mem.data.insert_temp(
-                        self.id.with("hover_data"),
-                        Some(HoverData {
-                            rect,
-                            dst: TreeComponent::Surface(surf_index),
-                            tab: None,
-                            tab_bar: None,
-                            outside: false,
-                        }),
-                    );
+                    mem.data
+                        .insert_temp(self.id.with("hover_data"), Some(hover));
                 });
             }
             return;

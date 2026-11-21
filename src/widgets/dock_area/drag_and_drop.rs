@@ -12,6 +12,9 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub(super) struct HoverData {
+    pub identity: Option<super::session::DestinationIdentity>,
+    pub surface_identity: Option<u64>,
+    pub insertion_order: Option<Vec<Id>>,
     /// Rect of the hovered element.
     pub rect: Rect,
 
@@ -669,6 +672,9 @@ mod tests {
                 let painter = ButtonRecorder::default();
                 let mut state = DragDropState {
                     hover: HoverData {
+                        identity: None,
+                        surface_identity: None,
+                        insertion_order: None,
                         rect,
                         dst: TreeComponent::Node(path),
                         tab: None,
@@ -729,6 +735,9 @@ mod tests {
                     );
                     let mut state = DragDropState {
                         hover: HoverData {
+                            identity: None,
+                            surface_identity: None,
+                            insertion_order: None,
                             rect,
                             dst: TreeComponent::Node(path),
                             tab: None,

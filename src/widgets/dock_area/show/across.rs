@@ -847,6 +847,7 @@ mod tests {
                 assert!(area.is_float_dock(target));
                 let destination_identity = area
                     .capture_destination_identity(NodePath::new(target, NodeIndex::root()));
+        let surface_identity_0 = area.dock_state.capture_surface_identity(target);
                 area.release_over(
                     Report {
                         stamp: 0,
@@ -856,7 +857,7 @@ mod tests {
                             TabInsert::Append,
                         )),
                         destination_identity,
-                        destination_surface_identity: area.dock_state.capture_surface_identity(NodePath::new(target, NodeIndex::root(.surface),
+                        destination_surface_identity: surface_identity_0,
                         insertion_order: None,
                         unfold: None,
                     },
@@ -1092,13 +1093,14 @@ mod tests {
         let destination = TabDestination::Node(target_path, TabInsert::Insert(TabIndex(2)));
         assert!(!area.destination_valid(&destination));
         let destination_identity = area.capture_destination_identity(target_path);
+        let surface_identity_1 = area.dock_state.capture_surface_identity(target_path.surface);
         area.release_over(
             Report {
                 stamp: 0,
                 rank: 0,
                 outcome: Outcome::Drop(destination),
                 destination_identity,
-                destination_surface_identity: area.dock_state.capture_surface_identity(target_path.surface),
+                destination_surface_identity: surface_identity_1,
                 insertion_order: None,
                 unfold: None,
             },
@@ -1128,6 +1130,7 @@ mod tests {
         let replacement = area.dock_state.leaf(target_path).unwrap().clone();
         *area.dock_state.leaf_mut(target_path).unwrap() = replacement;
 
+        let surface_identity_2 = area.dock_state.capture_surface_identity(target_path.surface);
         area.release_over(
             Report {
                 stamp: 0,
@@ -1137,7 +1140,7 @@ mod tests {
                     TabInsert::Append,
                 )),
                 destination_identity: Some(target_identity),
-                destination_surface_identity: area.dock_state.capture_surface_identity(target_path.surface),
+                destination_surface_identity: surface_identity_2,
                 insertion_order: None,
                 unfold: None,
             },
@@ -1286,13 +1289,14 @@ mod tests {
             Some(source),
         );
         let destination_identity = area.capture_destination_identity(target_path);
+        let surface_identity_3 = area.dock_state.capture_surface_identity(target_path.surface);
         area.release_over(
             Report {
                 stamp: 0,
                 rank: 0,
                 outcome: Outcome::Drop(TabDestination::Node(target_path, TabInsert::Append)),
                 destination_identity,
-                destination_surface_identity: area.dock_state.capture_surface_identity(target_path.surface),
+                destination_surface_identity: surface_identity_3,
                 insertion_order: None,
                 unfold: None,
             },
@@ -1325,13 +1329,14 @@ mod tests {
 
         // Exercise the actual remote-release boundary, not only apply_move.
         let destination_identity = area.capture_destination_identity(target_path);
+        let surface_identity_4 = area.dock_state.capture_surface_identity(target_path.surface);
         area.release_over(
             Report {
                 stamp: 0,
                 rank: 0,
                 outcome: Outcome::Drop(TabDestination::Node(target_path, TabInsert::Append)),
                 destination_identity,
-                destination_surface_identity: area.dock_state.capture_surface_identity(target_path.surface),
+                destination_surface_identity: surface_identity_4,
                 insertion_order: None,
                 unfold: None,
             },
@@ -1376,6 +1381,7 @@ mod tests {
         let session = DragSession::new(source, rect, egui::ViewportId::ROOT, Pos2::ZERO);
         assert!(area.drag_source_valid(session.payload, &mut viewer));
         let destination_identity = area.capture_destination_identity(destination_path);
+        let surface_identity_5 = area.dock_state.capture_surface_identity(destination_path.surface);
         area.release_over(
             Report {
                 stamp: 0,
@@ -1385,7 +1391,7 @@ mod tests {
                     TabInsert::Append,
                 )),
                 destination_identity,
-                destination_surface_identity: area.dock_state.capture_surface_identity(destination_path.surface),
+                destination_surface_identity: surface_identity_5,
                 insertion_order: None,
                 unfold: None,
             },

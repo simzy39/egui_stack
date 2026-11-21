@@ -358,6 +358,19 @@ impl<Tab> DockState<Tab> {
     /// ```
     pub fn move_node(&mut self, src: NodePath, dst: impl Into<TabDestination>) -> bool {
         let dst = dst.into();
+        // Validate both endpoints before removing anything from the source.
+        let destination_valid = match dst {
+            TabDestination::Node(path, TabInsert::Split(_)) => self.node(path).is_ok(),
+            TabDestination::Node(path, _) => self.leaf(path).is_ok(),
+            TabDestination::EmptySurface(surface) => self
+                .get_surface(surface)
+                .and_then(Surface::node_tree)
+                .is_some_and(|tree| tree.is_empty()),
+            TabDestination::Window(_) => true,
+        };
+        if !destination_valid {
+            return false;
+        }
         if matches!(dst, TabDestination::Node(d, _) if d == src) {
             return false;
         }
@@ -429,7 +442,23 @@ impl<Tab> DockState<Tab> {
     /// Moves a tab from a node to another node.
     /// You need to specify with [`TabDestination`] how the tab should be moved.
     pub fn move_tab(&mut self, src: TabPath, dst_tab: impl Into<TabDestination>) -> bool {
-        match dst_tab.into() {
+        let destination = dst_tab.into();
+        if self.leaf(src.node_path()).is_err_or(|leaf| src.tab.0 >= leaf.tabs.len()) {
+            return false;
+        }
+        let destination_valid = match destination {
+            TabDestination::Node(path, TabInsert::Split(_)) => self.node(path).is_ok(),
+            TabDestination::Node(path, _) => self.leaf(path).is_ok(),
+            TabDestination::EmptySurface(surface) => self
+                .get_surface(surface)
+                .and_then(Surface::node_tree)
+                .is_some_and(|tree| tree.is_empty()),
+            TabDestination::Window(_) => true,
+        };
+        if !destination_valid {
+            return false;
+        }
+        match destination {
             TabDestination::Window(position) => {
                 self.detach_tab(src, position);
                 return true;

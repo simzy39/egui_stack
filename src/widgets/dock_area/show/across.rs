@@ -550,7 +550,9 @@ impl<Tab> DockArea<'_, Tab> {
                     return false;
                 };
                 self.dock_state.leaf_mut(*path).is_ok_and(|leaf| {
+                    let mut seen = std::collections::HashSet::with_capacity(reported.len());
                     leaf.tabs.len() == reported.len()
+                        && reported.iter().all(|id| seen.insert(*id))
                         && leaf
                             .tabs
                             .iter_mut()
@@ -1014,6 +1016,30 @@ mod tests {
         assert!(!area.reported_insertion_order_valid(
             &destination,
             None,
+            &mut viewer,
+        ));
+    }
+
+    #[test]
+    fn positional_insert_report_rejects_ambiguous_tab_identities() {
+        let mut dock = DockState::new(vec!["duplicate", "duplicate"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let mut viewer = Viewer { allow_windows: true };
+        let mut area = DockArea::new(&mut dock);
+        let destination = TabDestination::Node(root, TabInsert::Insert(TabIndex(1)));
+        let reported: Vec<_> = area
+            .dock_state
+            .leaf_mut(root)
+            .unwrap()
+            .tabs
+            .iter_mut()
+            .map(|tab| viewer.id(tab))
+            .collect();
+
+        assert_eq!(reported[0], reported[1]);
+        assert!(!area.reported_insertion_order_valid(
+            &destination,
+            Some(&reported),
             &mut viewer,
         ));
     }

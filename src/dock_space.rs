@@ -1185,6 +1185,20 @@ impl<Tab> DockSpace<Tab> {
         floating.collapsed.retain(|name| live_float(name));
         floating.close_asked.retain(|name| live_float(name));
         floating.released_at.retain(|name, _| live_float(name));
+        // The new layout may already contain floats with higher identifiers
+        // than the previous runtime counter. Never allocate a previously used
+        // float name after rebuilding the space.
+        for dock in &self.docks {
+            if dock.floating {
+                if let Some(number) = dock
+                    .name
+                    .strip_prefix("float-")
+                    .and_then(|suffix| suffix.parse::<u32>().ok())
+                {
+                    floating.next = floating.next.max(number);
+                }
+            }
+        }
         self.floating = floating;
         // The replacement layout's origins take precedence, including when
         // the previous space has multiple stale entries for the same tab.
@@ -1513,6 +1527,19 @@ mod detach_tests {
 
     fn id(tab: &mut &'static str) -> Id {
         Id::new(*tab)
+    }
+
+    #[test]
+    fn carried_float_counter_never_regresses_below_rebuilt_docks() {
+        let mut old = DockSpace::<&'static str>::new();
+        old.floating.next = 2;
+        let mut replacement = DockSpace::<&'static str>::new();
+        replacement.add_dock("editor", DockRules::default(), vec!["one"]);
+        replacement.add_dock("float-27", DockRules::default(), vec!["floating"]);
+        let index = replacement.dock_index("float-27").unwrap();
+        replacement.docks[index].floating = true;
+        replacement.carry_floats_from(&mut old);
+        assert_eq!(replacement.floating.next, 27);
     }
 
     #[test]

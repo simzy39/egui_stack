@@ -84,17 +84,6 @@ struct PendingFloat {
     host: Option<crate::layout::FloatHost>,
 }
 
- impl PendingFloat {
-    fn from_drag(
-        source: drag_and_drop::TreeComponent,
-        rect: Rect,
-        host: Option<crate::layout::FloatHost>,
-        tab_id: Option<Id>,
-    ) -> Option<Self> {
-        let source = drag_and_drop::DragSource::from_parts(source, tab_id)?;
-        Some(Self { source, rect, host })
-    }
-}
 
 /// The dock of a [`DockSpace`](crate::DockSpace) a [`DockArea`] shows, and the space's docks.
 struct SpaceDock<'a, Tab> {

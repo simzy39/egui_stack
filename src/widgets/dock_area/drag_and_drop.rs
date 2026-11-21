@@ -79,20 +79,6 @@ impl DragSource {
         }
     }
 
-    pub(crate) fn tab_id(self) -> Option<Id> {
-        match self {
-            Self::Tab { id, .. } => Some(id),
-            Self::Group(_) => None,
-        }
-    }
-
-    pub(crate) fn from_parts(source: TreeComponent, tab_id: Option<Id>) -> Option<Self> {
-        match source {
-            TreeComponent::Tab(path) => Some(Self::Tab { path, id: tab_id? }),
-            TreeComponent::Node(path) => Some(Self::Group(path)),
-            TreeComponent::Surface(_) => None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -338,7 +338,7 @@ impl<Tab> DockArea<'_, Tab> {
                 if self
                     .refusal_of(&src, tab_viewer, &destination, true)
                     .is_none()
-                    && self.apply_move(src, destination, tab_viewer)
+                    && self.apply_move(source, destination, tab_viewer)
                     && let (Some(zone), Some(space)) = (report.unfold, &mut self.space)
                 {
                     space.no_drop.unfolds.push(zone);
@@ -446,13 +446,14 @@ impl<Tab> DockArea<'_, Tab> {
     /// Returns whether it moved.
     pub(super) fn apply_move(
         &mut self,
-        src: TreeComponent,
+        source: DragSource,
         destination: TabDestination,
         tab_viewer: &mut impl TabViewer<Tab = Tab>,
     ) -> bool {
-        if !self.source_valid(&src) {
+        if !self.drag_source_valid(source, tab_viewer) {
             return false;
         }
+        let src = source.component();
         if !self.destination_valid(&destination) {
             return false;
         }
@@ -645,9 +646,9 @@ mod tests {
                     .unwrap();
                 let target = space.dock_surface(&key).unwrap();
                 let src = if group {
-                    TreeComponent::Node(path)
+                    DragSource::Group(path)
                 } else {
-                    TreeComponent::Tab(TabPath::new(main, NodeIndex::root(), TabIndex(0)))
+                    DragSource::Tab { path: TabPath::new(main, NodeIndex::root(), TabIndex(0)), id: Id::unique("restricted") }
                 };
                 let mut viewer = Viewer { allow_windows };
                 let mut area = DockArea::dock(&mut space, "main");
@@ -662,7 +663,7 @@ mod tests {
                         )),
                         unfold: None,
                     },
-                    DragSource::from_parts(src, (!group).then(|| Id::unique("restricted"))).unwrap(),
+                    src,
                     rect,
                     &mut viewer,
                 );

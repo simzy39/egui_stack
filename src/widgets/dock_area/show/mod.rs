@@ -279,7 +279,7 @@ impl<Tab> DockArea<'_, Tab> {
             .as_ref()
             .is_some_and(|drag: &DragData| !self.drag_source_valid(drag.source, tab_viewer))
         {
-            if drag_data.as_ref().is_some_and(|drag| drag.source.tab_id().is_some()) {
+            if drag_data.as_ref().is_some_and(|drag| matches!(drag.source, DragSource::Tab { .. })) {
                 self.cancel_tab_drag(ui, state);
             }
             drag_data = None;
@@ -455,15 +455,12 @@ impl<Tab> DockArea<'_, Tab> {
                     space.no_drop.unfolds.push(zone);
                 }
                 let drag = &state.dnd.as_ref().unwrap().drag;
-                let source = drag.source.component();
-                let tab_id = drag.source.tab_id();
+                let source = drag.source;
                 match destination {
                     // Out of every dock, once the space's floats are drawn: a float.
                     TabDestination::Window(rect) if self.floats_on() => {
                         let host = self.release_host(rect.min);
-                        if let Some(pending) = PendingFloat::from_drag(source, rect, host, tab_id) {
-                            self.to_float.push(pending);
-                        }
+                        self.to_float.push(PendingFloat { source, rect, host });
                     }
                     destination => {
                         self.apply_move(source, destination, tab_viewer);

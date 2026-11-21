@@ -1545,6 +1545,50 @@ mod detach_tests {
     }
 
     #[test]
+    fn native_float_detachment_commits_pending_window_and_origin() {
+        let mut space = DockSpace::new();
+        let surface = space.add_dock("editor", DockRules::default(), vec!["one", "two"]);
+        let path = TabPath::new(surface, NodeIndex::root(), TabIndex(0));
+        let name = detach(
+            &mut space.state, &mut space.docks, &mut space.origins,
+            &mut space.floating, Detach::Tab(path), float_rect(), None,
+            FloatHost::Native, &mut id,
+        ).expect("native float should be queued");
+        assert_eq!(space.floating.next, 1);
+        assert_eq!(space.floating.pending.len(), 1);
+        assert_eq!(space.floating.pending[0].host, FloatHost::Native);
+        assert_eq!(space.floating.pending[0].dock, name);
+        assert_eq!(space.origins.len(), 1);
+        assert_eq!(space.origins[0].dock, "editor");
+    }
+
+    #[test]
+    fn moving_from_one_float_to_another_retains_original_origin() {
+        let mut space = DockSpace::new();
+        let surface = space.add_dock("editor", DockRules::default(), vec!["one", "two"]);
+        let source = TabPath::new(surface, NodeIndex::root(), TabIndex(0));
+        let first = detach(
+            &mut space.state, &mut space.docks, &mut space.origins,
+            &mut space.floating, Detach::Tab(source), float_rect(), None,
+            FloatHost::InWindow, &mut id,
+        ).unwrap();
+        let first_surface = space.dock_surface(&first).unwrap();
+        let second = detach(
+            &mut space.state, &mut space.docks, &mut space.origins,
+            &mut space.floating,
+            Detach::Tab(TabPath::new(first_surface, NodeIndex::root(), TabIndex(0))),
+            float_rect(), None, FloatHost::Native, &mut id,
+        ).unwrap();
+        assert_ne!(first, second);
+        assert_eq!(space.floating.pending.len(), 2);
+        assert_eq!(space.origins.len(), 1);
+        assert_eq!(space.origins[0].dock, "editor");
+        assert_eq!(space.origins[0].tab, Id::new("one"));
+        let target = space.dock_surface(&second).unwrap();
+        assert_eq!(space.state[target][NodeIndex::root()].tabs_count(), 1);
+    }
+
+    #[test]
     fn detach_group_preserves_each_tabs_origin() {
         let mut space = DockSpace::new();
         let surface = space.add_dock("editor", DockRules::default(), vec!["one", "two"]);

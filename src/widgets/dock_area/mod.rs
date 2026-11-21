@@ -204,11 +204,7 @@ impl DockArea<'_, ()> {
         if response.is_pointer_button_down_on() && ui.input(|i| i.pointer.primary_pressed()) {
             ui.data_mut(|d| {
                 let key = BodyLeaf::press_id(body.dock_area);
-                // Preserve the first claimant when multiple handles are
-                // rendered in the same body.
-                if d.get_temp::<(Option<DragSource>, Id)>(key).is_none() {
-                    d.insert_temp(key, (body.source, response.id));
-                }
+                BodyLeaf::retain_first_request(d, key, (body.source, response.id));
             });
         }
         let dragged = response.dragged() && ui.input(|i| i.pointer.is_decidedly_dragging());
@@ -216,9 +212,7 @@ impl DockArea<'_, ()> {
             ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::Grabbing);
             ui.data_mut(|d| {
                 let key = BodyLeaf::request_id(body.dock_area);
-                if d.get_temp::<(Option<DragSource>, Id)>(key).is_none() {
-                    d.insert_temp(key, (body.source, response.id));
-                }
+                BodyLeaf::retain_first_request(d, key, (body.source, response.id));
             });
         } else if response.hovered() && ui.ctx().dragged_id().is_none() {
             ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::Grab);
@@ -240,6 +234,16 @@ struct BodyLeaf {
 }
 
 impl BodyLeaf {
+    fn retain_first_request(
+        data: &mut egui::util::IdTypeMap,
+        key: Id,
+        request: (Option<DragSource>, Id),
+    ) {
+        if data.get_temp::<(Option<DragSource>, Id)>(key).is_none() {
+            data.insert_temp(key, request);
+        }
+    }
+
     fn id() -> Id {
         Id::unique("egui_stack::BodyLeaf")
     }

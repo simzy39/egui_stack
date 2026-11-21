@@ -973,9 +973,24 @@ mod tests {
         ], &mut dock);
         render(vec![Event::PointerMoved(pos2(180.0, 30.0))], &mut dock);
 
+        // Explicitly retain the original group as the active gesture. This
+        // makes the test independent of the theme's exact grip coordinates:
+        // the rendered UI must actually cancel a stale retained source.
+        let mut held = State::load(&ctx, area_id);
+        held.group_press = Some(super::super::super::state::GroupPress {
+            widget: Id::new("original_grip"),
+            source: original,
+        });
+        held.drag_start = Some(point);
+        held.store(&ctx, area_id);
+
         // A new leaf occupies the original location while the pointer is held.
         *dock.main_surface_mut() = crate::Tree::new(vec!["replacement"]);
         render(vec![Event::PointerMoved(pos2(210.0, 30.0))], &mut dock);
+        let cancelled = State::load(&ctx, area_id);
+        assert!(cancelled.tab_drag_cancelled);
+        assert!(cancelled.group_press.is_none());
+        assert!(cancelled.drag_start.is_none());
         render(vec![Event::PointerButton {
             pos: pos2(210.0, 30.0),
             button: PointerButton::Primary,

@@ -713,6 +713,41 @@ mod tests {
     }
 
     #[test]
+    fn remote_release_cannot_move_a_replacement_tab() {
+        let mut dock = DockState::new(vec!["original", "other"]);
+        dock.main_surface_mut().split_right(
+            NodeIndex::root(),
+            0.5,
+            vec!["destination"],
+        );
+        let source_path = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
+        let target_path = NodePath::new(SurfaceIndex::main(), NodeIndex(2));
+        let source = DragSource::Tab {
+            path: TabPath::new(SurfaceIndex::main(), NodeIndex(1), TabIndex(0)),
+            id: Id::unique("original"),
+        };
+        let rect = Rect::from_min_size(Pos2::ZERO, egui::vec2(200.0, 100.0));
+        let mut viewer = Viewer { allow_windows: true };
+        let mut area = DockArea::new(&mut dock);
+        area.dock_state.leaf_mut(source_path).unwrap().tabs[0] = "replacement";
+
+        // Exercise the actual remote-release boundary, not only apply_move.
+        area.release_over(
+            Report {
+                stamp: 0,
+                rank: 0,
+                outcome: Outcome::Drop(TabDestination::Node(target_path, TabInsert::Append)),
+                unfold: None,
+            },
+            source,
+            rect,
+            &mut viewer,
+        );
+        assert_eq!(area.dock_state.leaf(source_path).unwrap().tabs, ["replacement", "other"]);
+        assert_eq!(area.dock_state.leaf(target_path).unwrap().tabs, ["destination"]);
+    }
+
+    #[test]
     fn retained_tab_identity_rejects_replacement_at_same_position() {
         let mut dock = DockState::new(vec!["first", "second"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());

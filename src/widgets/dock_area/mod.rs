@@ -69,7 +69,7 @@ pub struct DockArea<'tree, Tab> {
     to_remove: Vec<TabRemoval>,
     to_detach: Vec<TabPath>,
     /// Groups moved by their Move group menu, applied once the area is drawn.
-    to_move_group: Vec<(NodePath, crate::TabDestination)>,
+    to_move_group: Vec<(DragSource, crate::TabDestination)>,
     /// Tabs and groups moved out to a new float, applied once the area is drawn: where, and
     /// what hosts it when chosen at the release (else the space's host).
     to_float: Vec<PendingFloat>,

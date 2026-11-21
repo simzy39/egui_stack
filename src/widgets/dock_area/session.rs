@@ -88,7 +88,9 @@ impl DragSession {
     /// Logical tab identity is checked separately by the dock area before interaction.
     pub(crate) fn source_in<Tab>(&self, state: &crate::DockState<Tab>) -> bool {
         match self.payload {
-            DragSource::Group(path) => state.leaf(path).is_ok_and(|leaf| !leaf.tabs.is_empty()),
+            DragSource::Group { path, id } => state.leaf(path).is_ok_and(|leaf| {
+                id != 0 && leaf.drag_identity == id && !leaf.tabs.is_empty()
+            }),
             DragSource::Tab { path, .. } => state
                 .leaf(path.node_path())
                 .is_ok_and(|leaf| path.tab.0 < leaf.tabs.len()),
@@ -136,7 +138,7 @@ impl DragSession {
     pub(crate) fn dragged(&self) -> Option<SpaceDrag> {
         let payload = match self.payload {
             DragSource::Tab { path, .. } => DragPayload::Tab(path),
-            DragSource::Group(path) => DragPayload::Group(path),
+            DragSource::Group { path, .. } => DragPayload::Group(path),
         };
         let over = self
             .reports

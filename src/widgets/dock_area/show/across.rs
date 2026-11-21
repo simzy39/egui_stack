@@ -326,7 +326,7 @@ impl<Tab> DockArea<'_, Tab> {
                 }) {
                     let may = match source {
                         DragSource::Tab { path, .. } => self.may_float(path, tab_viewer),
-                        DragSource::Group(path) => self.node_may_float(path, tab_viewer),
+                        DragSource::Group { path, .. } => self.node_may_float(path, tab_viewer),
                     };
                     if !may {
                         return;
@@ -371,7 +371,7 @@ impl<Tab> DockArea<'_, Tab> {
         let src = source.component();
         let may = match source {
             DragSource::Tab { path, .. } => self.may_float(path, tab_viewer),
-            DragSource::Group(path) => self.node_may_float(path, tab_viewer),
+            DragSource::Group { path, .. } => self.node_may_float(path, tab_viewer),
         };
         // Outside the floats' work area: refused, or torn out to a native window.
         let Some(host) = self.release_host(rect.min) else {
@@ -414,7 +414,9 @@ impl<Tab> DockArea<'_, Tab> {
     ) -> bool {
         match source {
             DragSource::Tab { path, id } => self.tab_identity(path, tab_viewer) == Some(id),
-            DragSource::Group(path) => self.source_valid(&TreeComponent::Node(path)),
+            DragSource::Group { path, id } => id != 0 && self.dock_state.leaf(path).is_ok_and(|leaf| {
+                !leaf.tabs.is_empty() && leaf.drag_identity == id
+            }),
         }
     }
 
@@ -472,7 +474,7 @@ impl<Tab> DockArea<'_, Tab> {
         // Report that honestly so a rejected/no-op drop cannot unfold a zone.
         if let TabDestination::Node(target, _) = &destination {
             match source {
-                DragSource::Group(path) if path == *target => return false,
+                DragSource::Group { path, .. } if path == *target => return false,
                 DragSource::Tab { path, .. }
                     if path.node_path() == *target
                         && self.dock_state[path.node_path()].tabs_count() == 1 =>
@@ -671,7 +673,7 @@ mod tests {
                     .unwrap();
                 let target = space.dock_surface(&key).unwrap();
                 let src = if group {
-                    DragSource::Group(path)
+                    DragSource::Group { path, id: 0 }
                 } else {
                     DragSource::Tab {
                         path: TabPath::new(main, NodeIndex::root(), TabIndex(0)),
@@ -680,6 +682,7 @@ mod tests {
                 };
                 let mut viewer = Viewer { allow_windows };
                 let mut area = DockArea::dock(&mut space, "main");
+                let src = if group { area.group_drag_source(path).unwrap() } else { src };
                 assert!(area.is_float_dock(target));
                 area.release_over(
                     Report {
@@ -736,16 +739,46 @@ mod tests {
     }
 
     #[test]
+    fn group_identity_rejects_replacement_in_reused_slot() {
+        let mut dock = DockState::new(vec!["original"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let mut area = DockArea::new(&mut dock);
+        let mut viewer = Viewer { allow_windows: true };
+        let id = area.dock_state.leaf_mut(root).unwrap().ensure_drag_identity();
+        let source = DragSource::Group { path: root, id };
+        assert!(area.drag_source_valid(source, &mut viewer));
+        area.dock_state.main_surface_mut().remove_leaf(NodeIndex::root());
+        *area.dock_state.main_surface_mut() = crate::Tree::new(vec!["replacement"]);
+        assert!(!area.drag_source_valid(source, &mut viewer));
+    }
+
+    #[test]
+    fn group_identity_survives_content_changes_but_not_cloning() {
+        let mut dock = DockState::new(vec!["original"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let mut area = DockArea::new(&mut dock);
+        let mut viewer = Viewer { allow_windows: true };
+        let id = area.dock_state.leaf_mut(root).unwrap().ensure_drag_identity();
+        let source = DragSource::Group { path: root, id };
+        area.dock_state.leaf_mut(root).unwrap().append_tab("another");
+        assert!(area.drag_source_valid(source, &mut viewer));
+        let cloned = area.dock_state.leaf(root).unwrap().clone();
+        *area.dock_state.leaf_mut(root).unwrap() = cloned;
+        assert!(!area.drag_source_valid(source, &mut viewer));
+    }
+
+    #[test]
     fn retained_group_source_rejects_empty_and_missing_leaves() {
         let mut dock = DockState::new(vec!["first"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
         let missing = NodePath::new(SurfaceIndex::main(), NodeIndex(100));
         let mut viewer = Viewer { allow_windows: true };
         let mut area = DockArea::new(&mut dock);
-        assert!(area.drag_source_valid(DragSource::Group(root), &mut viewer));
-        assert!(!area.drag_source_valid(DragSource::Group(missing), &mut viewer));
+        let id = area.dock_state.leaf_mut(root).unwrap().ensure_drag_identity();
+        assert!(area.drag_source_valid(DragSource::Group { path: root, id }, &mut viewer));
+        assert!(!area.drag_source_valid(DragSource::Group { path: missing, id }, &mut viewer));
         area.dock_state.leaf_mut(root).unwrap().tabs.clear();
-        assert!(!area.drag_source_valid(DragSource::Group(root), &mut viewer));
+        assert!(!area.drag_source_valid(DragSource::Group { path: root, id }, &mut viewer));
     }
 
     #[test]
@@ -795,8 +828,9 @@ mod tests {
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
         let mut viewer = Viewer { allow_windows: true };
         let mut area = DockArea::new(&mut dock);
+        let id = area.dock_state.leaf_mut(root).unwrap().ensure_drag_identity();
         assert!(!area.apply_move(
-            DragSource::Group(root),
+            DragSource::Group { path: root, id },
             TabDestination::Node(root, TabInsert::Append),
             &mut viewer,
         ));

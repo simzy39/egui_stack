@@ -1,11 +1,13 @@
-use std::ops;
+use std::{ops, sync::atomic::{AtomicU64, Ordering}};
+
+static NEXT_LEAF_DRAG_ID: AtomicU64 = AtomicU64::new(1);
 
 use egui::Rect;
 
 use crate::{Error, Result, TabIndex};
 
 /// The inner data of a [``Node::Leaf``](crate::Node), which contains tabs and can be collapsed.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 #[cfg_attr(
     feature = "serde",
     derive(serde::Deserialize, serde::Serialize),
@@ -32,9 +34,29 @@ pub struct LeafNode<Tab> {
 
     /// Whether the leaf tab bar is hidden.
     pub tab_bar_hidden: bool,
+
+    /// Runtime-only identity; zero means unassigned.
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub(crate) drag_identity: u64,
+}
+
+impl<Tab: Clone> Clone for LeafNode<Tab> {
+    fn clone(&self) -> Self {
+        Self { rect: self.rect, viewport: self.viewport, tabs: self.tabs.clone(),
+            active: self.active, scroll: self.scroll, collapsed: self.collapsed,
+            tab_bar_hidden: self.tab_bar_hidden, drag_identity: 0 }
+    }
 }
 
 impl<Tab> LeafNode<Tab> {
+    pub(crate) fn ensure_drag_identity(&mut self) -> u64 {
+        if self.drag_identity == 0 {
+            self.drag_identity = NEXT_LEAF_DRAG_ID.fetch_add(1, Ordering::Relaxed);
+            assert_ne!(self.drag_identity, 0, "leaf drag identity exhausted");
+        }
+        self.drag_identity
+    }
+
     /// Create New LeafNode with specified ``tabs``, all other internal values will be filled by "nothing" defaults.
     pub const fn new(tabs: Vec<Tab>) -> Self {
         LeafNode {
@@ -45,6 +67,7 @@ impl<Tab> LeafNode<Tab> {
             scroll: 0.0,
             collapsed: false,
             tab_bar_hidden: false,
+            drag_identity: 0,
         }
     }
 

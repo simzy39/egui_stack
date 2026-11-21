@@ -166,11 +166,11 @@ impl<Tab> DockArea<'_, Tab> {
             }
         }
 
-        for (path, destination) in std::mem::take(&mut self.to_move_group) {
+        for (source, destination) in std::mem::take(&mut self.to_move_group) {
             match destination {
                 TabDestination::Window(rect) if self.floats_on() => {
                     self.to_float.push(PendingFloat {
-                        source: DragSource::Group(path),
+                        source,
                         rect,
                         host: None,
                     });
@@ -178,7 +178,7 @@ impl<Tab> DockArea<'_, Tab> {
                 destination => {
                     // Menu-initiated moves are deferred too: validate their paths before
                     // mutating the tree, just as for drag-and-drop releases.
-                    self.apply_move(DragSource::Group(path), destination, tab_viewer);
+                    self.apply_move(source, destination, tab_viewer);
                 }
             }
         }
@@ -360,7 +360,7 @@ impl<Tab> DockArea<'_, Tab> {
         // the pointer is over: the source's, or another's of the space.
         let ghost = match &drag_data {
             Some(DragData {
-                source: DragSource::Group(path),
+                source: DragSource::Group { path, .. },
                 ..
             }) => Some((*path, None)),
             Some(DragData {

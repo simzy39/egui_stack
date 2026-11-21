@@ -1434,9 +1434,10 @@ impl<Tab> DockArea<'_, Tab> {
 
     /// Moves the group at `path` into a new window at its place, once the area is drawn.
     fn eject_group(&mut self, path: NodePath) {
-        if let Some(rect) = self.dock_state[path].rect() {
-            self.to_move_group
-                .push((path, TabDestination::Window(rect)));
+        if let Some(rect) = self.dock_state[path].rect()
+            && let Some(source) = self.group_drag_source(path)
+        {
+            self.to_move_group.push((source, TabDestination::Window(rect)));
         }
     }
 
@@ -1824,7 +1825,9 @@ impl<Tab> DockArea<'_, Tab> {
                     .group_refusal(path, 0..count, &destination, tab_viewer, true)
                     .is_none()
             {
-                self.to_move_group.push((path, destination));
+                if let Some(source) = self.group_drag_source(path) {
+                    self.to_move_group.push((source, destination));
+                }
                 ui.close();
             }
         }
@@ -1851,7 +1854,7 @@ impl<Tab> DockArea<'_, Tab> {
     }
 
     /// As [`try_initiate_tab_drag`](Self::try_initiate_tab_drag), for a whole leaf.
-    fn try_initiate_node_drag(&self, ui: &Ui, state: &mut State, path: NodePath) {
+    fn try_initiate_node_drag(&mut self, ui: &Ui, state: &mut State, path: NodePath) {
         if state.tab_drag_cancelled || state.drag_lost.is_some() {
             return;
         }
@@ -1863,6 +1866,7 @@ impl<Tab> DockArea<'_, Tab> {
             .get_or_insert_with(|| Self::press_origin(ui, pointer_pos));
         let delta = pointer_pos - start;
         if self.drag_activated(delta) {
+            let Some(source) = self.group_drag_source(path) else { return; };
             state.dragged_node = Some(DraggedNode {
                 path,
                 pointer: pointer_pos,
@@ -1871,12 +1875,20 @@ impl<Tab> DockArea<'_, Tab> {
                 mem.data.insert_temp(
                     self.id.with("drag_data"),
                     Some(DragData {
-                        source: DragSource::Group(path),
+                        source,
                         rect: self.dock_state[path].rect().unwrap(),
                     }),
                 );
             });
         }
+    }
+
+    /// Assign runtime identity when a group source is retained.
+    fn group_drag_source(&mut self, path: NodePath) -> Option<DragSource> {
+        let leaf = self.dock_state.leaf_mut(path).ok()?;
+        (!leaf.tabs.is_empty()).then(|| DragSource::Group {
+            path, id: leaf.ensure_drag_identity(),
+        })
     }
 
     /// Records a tab's identity once, while the originating widget is held, even before the

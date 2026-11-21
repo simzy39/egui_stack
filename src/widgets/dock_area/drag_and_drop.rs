@@ -63,19 +63,18 @@ pub(crate) struct DragData {
     pub rect: Rect,
 }
 
-/// A retained source has a mandatory logical identity for tabs. Group paths
-/// remain structural until leaves receive stable identities.
+/// Retained sources identify the original tab or leaf, not merely its tree slot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DragSource {
     Tab { path: TabPath, id: Id },
-    Group(NodePath),
+    Group { path: NodePath, id: u64 },
 }
 
 impl DragSource {
     pub(crate) fn component(self) -> TreeComponent {
         match self {
             Self::Tab { path, .. } => TreeComponent::Tab(path),
-            Self::Group(path) => TreeComponent::Node(path),
+            Self::Group { path, .. } => TreeComponent::Node(path),
         }
     }
 }
@@ -656,7 +655,7 @@ mod tests {
                         outside: false,
                     },
                     drag: DragData {
-                        source: DragSource::Group(source),
+                        source: DragSource::Group { path: source, id: 1 },
                         rect,
                     },
                     pointer: center + offset,
@@ -713,10 +712,9 @@ mod tests {
                             outside: false,
                         },
                         drag: DragData {
-                            source: DragSource::Group(NodePath::new(
-                                SurfaceIndex::main(),
-                                NodeIndex(2),
-                            )),
+                            source: DragSource::Group {
+                                path: NodePath::new(SurfaceIndex::main(), NodeIndex(2)), id: 1,
+                            },
                             rect,
                         },
                         pointer: rect.center(),

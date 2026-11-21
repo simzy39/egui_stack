@@ -655,11 +655,15 @@ impl<Tab> DockState<Tab> {
     /// Removes a tab at the specified `path`.
     /// This method will yield the removed tab, or `None` if it doesn't exist.
     pub fn remove_tab(&mut self, path: TabPath) -> Option<Tab> {
-        let removed_tab = self[path.surface].remove_tab((path.node, path.tab));
+        // A rejected removal must not mutate the tree or close an empty window.
+        self.leaf(path.node_path())
+            .ok()
+            .filter(|leaf| path.tab.0 < leaf.tabs.len())?;
+        let removed_tab = self[path.surface].remove_tab((path.node, path.tab))?;
         if self.is_window(path.surface) && self[path.surface].is_empty() {
             self.remove_surface(path.surface);
         }
-        removed_tab
+        Some(removed_tab)
     }
 
     /// Removes a leaf at the specified `path`.
@@ -1044,6 +1048,24 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn removing_invalid_tab_path_preserves_tree_and_focus() {
+        let mut dock = DockState::new(vec!["first", "second"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        dock.set_focused_node_and_surface(root);
+        let focus = dock.focused_leaf();
+
+        for path in [
+            TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(99)),
+            TabPath::new(SurfaceIndex::main(), NodeIndex(999), TabIndex(0)),
+            TabPath::new(SurfaceIndex(999), NodeIndex::root(), TabIndex(0)),
+        ] {
+            assert_eq!(dock.remove_tab(path), None);
+            assert_eq!(dock.leaf(root).unwrap().tabs, ["first", "second"]);
+            assert_eq!(dock.focused_leaf(), focus);
+        }
+    }
 
     #[test]
     fn splitting_an_empty_node_is_rejected_without_removing_source() {

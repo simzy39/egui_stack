@@ -1315,7 +1315,10 @@ pub(crate) fn detach<Tab>(
     };
     if !moved {
         docks.pop();
-        state.remove_surface(surface);
+        // The new dock occupies a previously vacant surface. Leave that slot
+        // vacant again without resetting focus on the source dock:
+        // remove_surface unconditionally focuses the main surface.
+        state.take_surface(surface);
         return None;
     }
     *origins = pending_origins;

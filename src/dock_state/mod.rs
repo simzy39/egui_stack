@@ -45,10 +45,7 @@ use crate::{
 #[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct DockState<Tab> {
-    surfaces: Vec<Surface<Tab>>,
-    /// Runtime identities for occupied slots; never serialized.
-    #[cfg_attr(feature = "serde", serde(skip))]
-    surface_identities: Vec<u64>,
+    surfaces: Vec<SurfaceSlot<Tab>>,
     focused_surface: Option<SurfaceIndex>, // Part of the tree which is in focus.
 
     /// Contains translations of text shown in [`DockArea`](crate::DockArea).
@@ -56,11 +53,47 @@ pub struct DockState<Tab> {
     pub translations: Translations,
 }
 
+/// A surface and its runtime identity form one owned slot. The identity is
+/// deliberately excluded from persistence and reset on cloning.
+#[derive(Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+struct SurfaceSlot<Tab> {
+    surface: Surface<Tab>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    identity: u64,
+}
+
+impl<Tab> SurfaceSlot<Tab> {
+    fn new(surface: Surface<Tab>) -> Self {
+        Self { surface, identity: 0 }
+    }
+}
+
+impl<Tab: Clone> Clone for SurfaceSlot<Tab> {
+    fn clone(&self) -> Self {
+        Self::new(self.surface.clone())
+    }
+}
+
+impl<Tab> std::ops::Deref for SurfaceSlot<Tab> {
+    type Target = Surface<Tab>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.surface
+    }
+}
+
+impl<Tab> std::ops::DerefMut for SurfaceSlot<Tab> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.identity = 0;
+        &mut self.surface
+    }
+}
+
 impl<Tab: Clone> Clone for DockState<Tab> {
     fn clone(&self) -> Self {
         Self {
             surfaces: self.surfaces.clone(),
-            surface_identities: Vec::new(),
             focused_surface: self.focused_surface,
             translations: self.translations.clone(),
         }
@@ -84,6 +117,7 @@ impl<Tab> ops::Index<SurfaceIndex> for DockState<Tab> {
 impl<Tab> ops::IndexMut<SurfaceIndex> for DockState<Tab> {
     #[inline(always)]
     fn index_mut(&mut self, index: SurfaceIndex) -> &mut Self::Output {
+        self.invalidate_surface_identity(index);
         match self.surfaces[index.0].node_tree_mut() {
             Some(tree) => tree,
             None => {
@@ -113,6 +147,7 @@ impl<Tab> ops::Index<NodePath> for DockState<Tab> {
 impl<Tab> ops::IndexMut<NodePath> for DockState<Tab> {
     #[inline(always)]
     fn index_mut(&mut self, index: NodePath) -> &mut Self::Output {
+        self.invalidate_surface_identity(index.surface);
         match self.surfaces[index.surface.0].node_tree_mut() {
             Some(tree) => &mut tree[index.node],
             None => {
@@ -129,7 +164,7 @@ impl<Tab> DockState<Tab> {
     /// Create a new tree with given tabs at the main surface's root node.
     pub fn new(tabs: Vec<Tab>) -> Self {
         Self {
-            surfaces: vec![Surface::Main(Tree::new(tabs))],
+            surfaces: vec![SurfaceSlot::new(Surface::Main(Tree::new(tabs)))],
             surface_identities: Vec::new(),
             focused_surface: None,
             translations: Translations::english(),
@@ -171,7 +206,7 @@ impl<Tab> DockState<Tab> {
     /// window_state.set_size(Vec2::splat(100.0));
     /// ```
     pub fn get_window_state_mut(&mut self, surface: SurfaceIndex) -> Option<&mut WindowState> {
-        match self.surfaces.get_mut(surface.0)? {
+        match &mut self.surfaces.get_mut(surface.0)?.surface {
             Surface::Window(_, state) => Some(state),
             _ => None,
         }
@@ -181,7 +216,7 @@ impl<Tab> DockState<Tab> {
     ///
     /// Returns `None` if the surface is an [`Empty`](Surface::Empty), [`Main`](Surface::Main), or doesn't exist.
     pub fn get_window_state(&self, surface: SurfaceIndex) -> Option<&WindowState> {
-        match self.surfaces.get(surface.0)? {
+        match &self.surfaces.get(surface.0)?.surface {
             Surface::Window(_, state) => Some(state),
             _ => None,
         }
@@ -191,17 +226,14 @@ impl<Tab> DockState<Tab> {
     /// dock of a [`DockSpace`](crate::DockSpace).
     #[inline]
     pub(crate) fn is_window(&self, surface: SurfaceIndex) -> bool {
-        matches!(self.surfaces.get(surface.0), Some(Surface::Window(..)))
+        matches!(self.surfaces.get(surface.0).map(|slot| &slot.surface), Some(Surface::Window(..)))
     }
 
     /// Capture the identity of a surface slot, including a vacant slot, assigning one on first use.
     /// Identities are runtime-only; reused or replaced slots receive new identities.
     pub(crate) fn capture_surface_identity(&mut self, index: SurfaceIndex) -> Option<u64> {
         self.surfaces.get(index.0)?;
-        if self.surface_identities.len() <= index.0 {
-            self.surface_identities.resize(index.0 + 1, 0);
-        }
-        let identity = &mut self.surface_identities[index.0];
+        let identity = &mut self.surfaces[index.0].identity;
         if *identity == 0 {
             static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
             *identity = NEXT
@@ -218,12 +250,12 @@ impl<Tab> DockState<Tab> {
     /// Read an identity without assigning one to a replacement surface.
     pub(crate) fn current_surface_identity(&self, index: SurfaceIndex) -> Option<u64> {
         self.surfaces.get(index.0)?;
-        self.surface_identities.get(index.0).copied().filter(|identity| *identity != 0)
+        Some(self.surfaces[index.0].identity).filter(|identity| *identity != 0)
     }
 
     fn invalidate_surface_identity(&mut self, index: SurfaceIndex) {
-        if let Some(identity) = self.surface_identities.get_mut(index.0) {
-            *identity = 0;
+        if let Some(slot) = self.surfaces.get_mut(index.0) {
+            slot.identity = 0;
         }
     }
 
@@ -234,9 +266,9 @@ impl<Tab> DockState<Tab> {
         self.invalidate_surface_identity(index);
         let surface = Surface::Main(tree);
         if index.0 < self.surfaces.len() {
-            self.surfaces[index.0] = surface;
+            self.surfaces[index.0] = SurfaceSlot::new(surface);
         } else {
-            self.surfaces.push(surface);
+            self.surfaces.push(SurfaceSlot::new(surface));
         }
         index
     }
@@ -249,7 +281,7 @@ impl<Tab> DockState<Tab> {
         } else {
             Surface::Empty
         };
-        let taken = std::mem::replace(self.surfaces.get_mut(surface.0)?, empty);
+        let taken = std::mem::replace(&mut self.surfaces.get_mut(surface.0)?.surface, empty);
         self.invalidate_surface_identity(surface);
         if self.focused_surface == Some(surface) {
             self.focused_surface = None;
@@ -259,7 +291,7 @@ impl<Tab> DockState<Tab> {
 
     /// The surfaces, by value.
     pub(crate) fn into_surfaces(self) -> Vec<Surface<Tab>> {
-        self.surfaces
+        self.surfaces.into_iter().map(|slot| slot.surface).collect()
     }
 
     /// Returns the viewport [`Rect`] and the `Tab` inside the focused leaf node or `None` if no node is in focus.
@@ -273,13 +305,13 @@ impl<Tab> DockState<Tab> {
     #[inline]
     pub fn get_surface_mut(&mut self, surface: SurfaceIndex) -> Option<&mut Surface<Tab>> {
         self.invalidate_surface_identity(surface);
-        self.surfaces.get_mut(surface.0)
+        self.surfaces.get_mut(surface.0).map(|slot| &mut slot.surface)
     }
 
     /// Get an immutable borrow to the raw surface from a surface index.
     #[inline]
     pub fn get_surface(&self, surface: SurfaceIndex) -> Option<&Surface<Tab>> {
-        self.surfaces.get(surface.0)
+        self.surfaces.get(surface.0).map(|slot| &slot.surface)
     }
 
     /// Returns true if the specified surface exists and isn't [`Empty`](Surface::Empty).
@@ -319,10 +351,10 @@ impl<Tab> DockState<Tab> {
         }
         self.invalidate_surface_identity(surface_index);
         if surface_index.0 == self.surfaces.len() - 1 {
-            self.surfaces.pop()
+            self.surfaces.pop().map(|slot| slot.surface)
         } else {
             Some(std::mem::replace(
-                &mut self.surfaces[surface_index.0],
+                &mut self.surfaces[surface_index.0].surface,
                 Surface::Empty,
             ))
         }
@@ -360,6 +392,7 @@ impl<Tab> DockState<Tab> {
     ///
     /// This is the same as `&mut self[path]` but returns an error instead of panicking.
     pub fn node_mut(&mut self, path: NodePath) -> Result<&mut Node<Tab>> {
+        self.invalidate_surface_identity(path.surface);
         self.surfaces
             .get_mut(path.surface.0)
             .ok_or(Error::InvalidSurface)?
@@ -501,7 +534,7 @@ impl<Tab> DockState<Tab> {
                 // An empty slot has no tree and cannot be accessed through IndexMut.
                 // Destination validity was checked before the source was detached.
                 self.invalidate_surface_identity(surface);
-                self.surfaces[surface.0] = Surface::Main(tree);
+                self.surfaces[surface.0] = SurfaceSlot::new(Surface::Main(tree));
             }
         }
         self.cleanup_moved_source(src);
@@ -587,7 +620,7 @@ impl<Tab> DockState<Tab> {
             TabDestination::EmptySurface(dst_surface) => {
                 let tab = self[src.node_path()].remove_tab(src.tab).unwrap();
                 self.invalidate_surface_identity(dst_surface);
-                self.surfaces[dst_surface.0] = Surface::Main(Tree::new(vec![tab]));
+                self.surfaces[dst_surface.0] = SurfaceSlot::new(Surface::Main(Tree::new(vec![tab])));
             }
         }
         self.cleanup_moved_source(cleanup_source);
@@ -789,9 +822,9 @@ impl<Tab> DockState<Tab> {
         let index = self.find_empty_surface_index();
         self.invalidate_surface_identity(index);
         if index.0 < self.surfaces.len() {
-            self.surfaces[index.0] = surface;
+            self.surfaces[index.0] = SurfaceSlot::new(surface);
         } else {
-            self.surfaces.push(surface);
+            self.surfaces.push(SurfaceSlot::new(surface));
         }
         index
     }
@@ -815,13 +848,13 @@ impl<Tab> DockState<Tab> {
     /// # Panics
     /// If `index` is not a valid `SurfaceIndex`
     fn ensure_tree(&mut self, index: SurfaceIndex) {
-        if matches!(self.surfaces[index.0], Surface::Empty) {
+        if self.surfaces[index.0].is_empty() {
             self.invalidate_surface_identity(index);
-            self.surfaces[index.0] = if index == SurfaceIndex::main() {
+            self.surfaces[index.0] = SurfaceSlot::new(if index == SurfaceIndex::main() {
                 Surface::Main(Tree::new(vec![]))
             } else {
                 Surface::Window(Tree::new(vec![]), WindowState::default())
-            }
+            });
         }
     }
 
@@ -849,7 +882,7 @@ impl<Tab> DockState<Tab> {
 
     /// Returns an [`Iterator`] over all surfaces.
     pub fn iter_surfaces(&self) -> impl Iterator<Item = &Surface<Tab>> {
-        self.surfaces.iter()
+        self.surfaces.iter().map(|slot| &slot.surface)
     }
 
     /// Returns an [`Iterator`] over all surfaces with their corresponding [`SurfaceIndex`].
@@ -857,24 +890,24 @@ impl<Tab> DockState<Tab> {
         self.surfaces
             .iter()
             .enumerate()
-            .map(|(index, surface)| (SurfaceIndex(index), surface))
+            .map(|(index, slot)| (SurfaceIndex(index), &slot.surface))
     }
 
     /// Returns a mutable [`Iterator`] over all surfaces.
     pub fn iter_surfaces_mut(&mut self) -> impl Iterator<Item = &mut Surface<Tab>> {
-        self.surface_identities.fill(0);
-        self.surfaces.iter_mut()
+        for slot in &mut self.surfaces { slot.identity = 0; }
+        self.surfaces.iter_mut().map(|slot| &mut slot.surface)
     }
 
     /// Returns a mutable [`Iterator`] over all surfaces with their corresponding [`SurfaceIndex`].
     pub fn iter_surfaces_mut_indexed(
         &mut self,
     ) -> impl Iterator<Item = (SurfaceIndex, &mut Surface<Tab>)> {
-        self.surface_identities.fill(0);
+        for slot in &mut self.surfaces { slot.identity = 0; }
         self.surfaces
             .iter_mut()
             .enumerate()
-            .map(|(index, surface)| (SurfaceIndex(index), surface))
+            .map(|(index, slot)| (SurfaceIndex(index), &mut slot.surface))
     }
 
     /// Returns an [`Iterator`] of **all** underlying nodes in the dock state,
@@ -956,7 +989,7 @@ impl<Tab> DockState<Tab> {
     pub fn iter_nodes(&self) -> impl Iterator<Item = &Node<Tab>> {
         self.surfaces
             .iter()
-            .filter_map(|surface| surface.node_tree())
+            .filter_map(|slot| slot.surface.node_tree())
             .flat_map(|nodes| nodes.iter())
     }
 
@@ -995,9 +1028,9 @@ impl<Tab> DockState<Tab> {
             ..
         } = self;
         // Emptied windows leave a hole, so that the surfaces after them keep their index.
-        let mut surfaces: Vec<_> = surfaces
+        let mut surfaces: Vec<SurfaceSlot<NewTab>> = surfaces
             .iter()
-            .map(|surface| surface.filter_map_tabs(&mut function))
+            .map(|slot| SurfaceSlot::new(slot.surface.filter_map_tabs(&mut function)))
             .collect();
         while surfaces.len() > 1 && surfaces.last().is_some_and(Surface::is_empty) {
             surfaces.pop();
@@ -1069,9 +1102,9 @@ impl<Tab> DockState<Tab> {
         // Retention may change tab order, remove nodes, or replace an occupied
         // window with a vacancy. Invalidate *before* invoking user code so even
         // a retained drag report cannot outlive a reentrant structural edit.
-        self.surface_identities.fill(0);
-        for surface in &mut self.surfaces {
-            match surface {
+        for slot in &mut self.surfaces { slot.identity = 0; }
+        for slot in &mut self.surfaces {
+            match &mut slot.surface {
                 Surface::Main(tree) => tree.retain_tabs(&mut predicate),
                 surface => surface.retain_tabs(&mut predicate),
             }

@@ -468,7 +468,7 @@ mod custom_handle_request_tests {
             BodyLeaf::retain_first_request(data, key, 11, (Some(source()), handle));
             assert_eq!(
                 data.remove_temp::<(u64, Option<DragSource>, Id)>(key),
-                Some((11, None, handle)),
+                Some((11, Some(source()), handle)),
             );
         });
     }

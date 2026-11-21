@@ -1939,6 +1939,7 @@ impl<Tab> DockArea<'_, Tab> {
         tab_viewer: &mut impl TabViewer<Tab = Tab>,
     ) {
         if state.tab_press.is_some()
+            || state.group_press.is_some()
             || state.tab_drag_cancelled
             || state.drag_lost.is_some()
             || !ui.input(|i| i.pointer.primary_down())

@@ -1251,6 +1251,57 @@ mod test {
     }
 
     #[test]
+    fn cloning_dock_state_does_not_copy_runtime_surface_identity() {
+        let mut original = DockState::new(vec!["main"]);
+        let extra = original.add_window(vec!["other"]);
+        let main_id = original.capture_surface_identity(SurfaceIndex::main()).unwrap();
+        let extra_id = original.capture_surface_identity(extra).unwrap();
+
+        let mut cloned = original.clone();
+        assert_eq!(cloned.current_surface_identity(SurfaceIndex::main()), None);
+        assert_eq!(cloned.current_surface_identity(extra), None);
+        assert_ne!(cloned.capture_surface_identity(SurfaceIndex::main()), Some(main_id));
+        assert_ne!(cloned.capture_surface_identity(extra), Some(extra_id));
+        assert_eq!(original.current_surface_identity(SurfaceIndex::main()), Some(main_id));
+        assert_eq!(original.current_surface_identity(extra), Some(extra_id));
+    }
+
+    #[test]
+    fn direct_mutable_surface_access_invalidates_retained_identity() {
+        let mut dock = DockState::new(vec!["main"]);
+        let extra = dock.add_window(vec!["other"]);
+        let original = dock.capture_surface_identity(extra).unwrap();
+        assert!(dock.get_surface_mut(extra).is_some());
+        assert_eq!(dock.current_surface_identity(extra), None);
+        assert_ne!(dock.capture_surface_identity(extra), Some(original));
+
+        let original = dock.capture_surface_identity(extra).unwrap();
+        let _ = dock.iter_surfaces_mut().count();
+        assert_eq!(dock.current_surface_identity(extra), None);
+        assert_ne!(dock.capture_surface_identity(extra), Some(original));
+
+        let original = dock.capture_surface_identity(extra).unwrap();
+        let _ = dock.iter_surfaces_mut_indexed().count();
+        assert_eq!(dock.current_surface_identity(extra), None);
+        assert_ne!(dock.capture_surface_identity(extra), Some(original));
+    }
+
+    #[test]
+    fn vacant_surface_identity_is_invalidated_by_reuse() {
+        let mut dock = DockState::new(vec!["main"]);
+        let empty = dock.add_window(vec!["temporary"]);
+        let trailing = dock.add_window(vec!["trailing"]);
+        dock.remove_surface(empty).unwrap();
+        assert!(dock.is_surface_valid(trailing));
+
+        let vacant_identity = dock.capture_surface_identity(empty).unwrap();
+        let replacement = dock.add_docked_surface(Tree::new(vec!["new"]));
+        assert_eq!(replacement, empty);
+        assert_eq!(dock.current_surface_identity(empty), None);
+        assert_ne!(dock.capture_surface_identity(empty), Some(vacant_identity));
+    }
+
+    #[test]
     fn recycled_surface_slot_gets_a_new_runtime_identity() {
         let mut dock = DockState::new(vec!["main"]);
         let first = dock.add_window(vec!["first"]);

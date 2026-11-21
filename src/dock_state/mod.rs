@@ -337,6 +337,21 @@ impl<Tab> DockState<Tab> {
         }
     }
 
+    /// Whether a destination can accept a move without clamping a stale tab index.
+    pub(crate) fn valid_move_destination(&self, destination: &TabDestination) -> bool {
+        match *destination {
+            TabDestination::Node(path, TabInsert::Split(_)) => self.node(path).is_ok(),
+            TabDestination::Node(path, TabInsert::Insert(index)) => self
+                .leaf(path)
+                .is_ok_and(|leaf| index.0 <= leaf.tabs.len()),
+            TabDestination::Node(path, TabInsert::Append) => self.leaf(path).is_ok(),
+            TabDestination::EmptySurface(surface) => self
+                .get_surface(surface)
+                .is_some_and(Surface::is_empty),
+            TabDestination::Window(_) => true,
+        }
+    }
+
     /// Moves a whole leaf, all its tabs in their order, as a tab is moved: into another leaf's
     /// tabs ([`TabInsert::Insert`] at an index, [`TabInsert::Append`] after them), beside a leaf
     /// ([`TabInsert::Split`]), into an empty surface, or into a new window. The leaf's active tab
@@ -356,21 +371,6 @@ impl<Tab> DockState<Tab> {
     /// assert_eq!(leaf.tabs, ["a", "b", "c", "d", "e"]);
     /// assert_eq!(leaf.active, TabIndex(3));
     /// ```
-    /// Whether a destination can accept a move without clamping a stale tab index.
-    pub(crate) fn valid_move_destination(&self, destination: &TabDestination) -> bool {
-        match *destination {
-            TabDestination::Node(path, TabInsert::Split(_)) => self.node(path).is_ok(),
-            TabDestination::Node(path, TabInsert::Insert(index)) => self
-                .leaf(path)
-                .is_ok_and(|leaf| index.0 <= leaf.tabs.len()),
-            TabDestination::Node(path, TabInsert::Append) => self.leaf(path).is_ok(),
-            TabDestination::EmptySurface(surface) => self
-                .get_surface(surface)
-                .is_some_and(Surface::is_empty),
-            TabDestination::Window(_) => true,
-        }
-    }
-
     pub fn move_node(&mut self, src: NodePath, dst: impl Into<TabDestination>) -> bool {
         let dst = dst.into();
         // Validate both endpoints before removing anything from the source.

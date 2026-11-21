@@ -795,12 +795,10 @@ mod tests {
         let source = area.group_drag_source(root).unwrap();
         let rect = Rect::from_min_size(Pos2::ZERO, egui::vec2(200.0, 100.0));
         let session = DragSession::new(source, rect, egui::ViewportId::ROOT, Pos2::ZERO);
-        assert!(session.source_in(area.dock_state));
         assert!(area.drag_source_valid(session.payload, &mut viewer));
 
         // A remote viewport can still hold a report, but its source is gone.
         *area.dock_state.main_surface_mut() = crate::Tree::new(vec!["replacement"]);
-        assert!(!session.source_in(area.dock_state));
         assert!(!area.drag_source_valid(session.payload, &mut viewer));
         assert!(!area.apply_move(
             session.payload,
@@ -879,17 +877,15 @@ mod tests {
         let mut area = DockArea::new(&mut dock);
         let original = area.group_drag_source(root).unwrap();
         let stale = DragSession::new(original, rect, egui::ViewportId::ROOT, Pos2::ZERO);
-        assert!(stale.source_in(area.dock_state));
+        assert!(area.drag_source_valid(stale.payload, &mut viewer));
 
         // A replaced leaf must invalidate the old session, but not prevent a
         // fresh gesture from starting on the new leaf at the same location.
         *area.dock_state.main_surface_mut() = crate::Tree::new(vec!["replacement"]);
-        assert!(!stale.source_in(area.dock_state));
         assert!(!area.drag_source_valid(stale.payload, &mut viewer));
         let fresh = area.group_drag_source(root).unwrap();
         assert_ne!(fresh, original);
         let next = DragSession::new(fresh, rect, egui::ViewportId::ROOT, Pos2::ZERO);
-        assert!(next.source_in(area.dock_state));
         assert!(area.drag_source_valid(next.payload, &mut viewer));
 
         let [left, right] = area

@@ -22,7 +22,7 @@ use egui::{Pos2, Rect, ViewportId};
 
 use super::drag_and_drop::DragSource;
 use crate::layout::ZoneName;
-use crate::{NodePath, TabDestination, TabPath};
+use crate::{TabDestination, TabPath};
 
 /// How many passes of the source a drag released outside its window waits for another viewport
 /// to see the pointer over one of its docks, where the system hides window positions: about a
@@ -84,19 +84,6 @@ pub(crate) enum Outcome {
 }
 
 impl DragSession {
-    /// Whether the cached source location still exists in `state`.
-    /// Logical tab identity is checked separately by the dock area before interaction.
-    pub(crate) fn source_in<Tab>(&self, state: &crate::DockState<Tab>) -> bool {
-        match self.payload {
-            DragSource::Group { path, id } => state.leaf(path).is_ok_and(|leaf| {
-                id != 0 && leaf.drag_identity == id && !leaf.tabs.is_empty()
-            }),
-            DragSource::Tab { path, .. } => state
-                .leaf(path.node_path())
-                .is_ok_and(|leaf| path.tab.0 < leaf.tabs.len()),
-        }
-    }
-
     /// A session for a payload dragged in the source viewport.
     pub(crate) fn new(
         payload: DragSource,

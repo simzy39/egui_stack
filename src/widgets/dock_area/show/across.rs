@@ -7,6 +7,7 @@ use super::super::{
     drag_and_drop::{DragData, TreeComponent, make_overlay_painter},
     session::{DragSession, Outcome, RELEASED_PASSES, Report},
     state::State,
+    PendingFloat,
 };
 use crate::dock_space::record_origin;
 use crate::layout::ZoneName;
@@ -379,7 +380,9 @@ impl<Tab> DockArea<'_, Tab> {
                 .refusal_of(&src, tab_viewer, &destination, true)
                 .is_none()
         {
-            self.to_float.push((src, rect, Some(host), tab_id));
+            if let Some(pending) = PendingFloat::from_drag(src, rect, Some(host), tab_id) {
+                self.to_float.push(pending);
+            }
         }
     }
 

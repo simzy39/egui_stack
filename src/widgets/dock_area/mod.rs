@@ -72,14 +72,37 @@ pub struct DockArea<'tree, Tab> {
     to_move_group: Vec<(NodePath, crate::TabDestination)>,
     /// Tabs and groups moved out to a new float, applied once the area is drawn: where, and
     /// what hosts it when chosen at the release (else the space's host).
-    to_float: Vec<(
-        drag_and_drop::TreeComponent,
-        Rect,
-        Option<crate::layout::FloatHost>,
-        Option<Id>,
-    )>,
+    to_float: Vec<PendingFloat>,
     new_focused: Option<NodePath>,
     tab_hover_rect: Option<(Rect, TabIndex)>,
+}
+
+/// A deferred float always records a tab's logical identity, or a group's node.
+struct PendingFloat {
+    source: FloatSource,
+    rect: Rect,
+    host: Option<crate::layout::FloatHost>,
+}
+
+enum FloatSource {
+    Tab { path: crate::TabPath, id: Id },
+    Group(NodePath),
+}
+
+impl PendingFloat {
+    fn from_drag(
+        source: drag_and_drop::TreeComponent,
+        rect: Rect,
+        host: Option<crate::layout::FloatHost>,
+        tab_id: Option<Id>,
+    ) -> Option<Self> {
+        let source = match source {
+            drag_and_drop::TreeComponent::Tab(path) => FloatSource::Tab { path, id: tab_id? },
+            drag_and_drop::TreeComponent::Node(path) => FloatSource::Group(path),
+            drag_and_drop::TreeComponent::Surface(_) => return None,
+        };
+        Some(Self { source, rect, host })
+    }
 }
 
 /// The dock of a [`DockSpace`](crate::DockSpace) a [`DockArea`] shows, and the space's docks.

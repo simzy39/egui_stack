@@ -8,6 +8,7 @@ use egui::{
 use super::{
     drag_and_drop::{DragData, DragDropState, HoverData, TreeComponent, make_overlay_painter},
     session::Outcome,
+    FloatSource, PendingFloat,
     state::State,
     tab_removal::TabRemoval,
 };
@@ -151,12 +152,13 @@ impl<Tab> DockArea<'_, Tab> {
                 let size = self.dock_state[path.node_path()]
                     .rect()
                     .map_or(Vec2::new(100., 150.), |rect| rect.size());
-                self.to_float.push((
-                    TreeComponent::Tab(path),
-                    Rect::from_min_size(mouse_pos, size),
-                    None,
-                    None,
-                ));
+                if let Some(id) = self.tab_identity(path, tab_viewer) {
+                    self.to_float.push(PendingFloat {
+                        source: FloatSource::Tab { path, id },
+                        rect: Rect::from_min_size(mouse_pos, size),
+                        host: None,
+                    });
+                }
             } else {
                 self.dock_state.eject_tab(path, mouse_pos);
             }
@@ -165,7 +167,11 @@ impl<Tab> DockArea<'_, Tab> {
         for (path, destination) in std::mem::take(&mut self.to_move_group) {
             match destination {
                 TabDestination::Window(rect) if self.floats_on() => {
-                    self.to_float.push((TreeComponent::Node(path), rect, None, None));
+                    self.to_float.push(PendingFloat {
+                        source: FloatSource::Group(path),
+                        rect,
+                        host: None,
+                    });
                 }
                 destination => self.dock_state.move_node(path, destination),
             }
@@ -173,12 +179,12 @@ impl<Tab> DockArea<'_, Tab> {
 
         // Removal and group moves above can change a previously validated drag's source.
         // Recheck immediately before executing the deferred float.
-        for (source, rect, host, tab_id) in std::mem::take(&mut self.to_float) {
-            let valid = if tab_id.is_some() {
-                self.drag_source_valid(&source, tab_id, tab_viewer)
-            } else {
-                self.source_valid(&source)
+        for PendingFloat { source, rect, host } in std::mem::take(&mut self.to_float) {
+            let (source, tab_id) = match source {
+                FloatSource::Tab { path, id } => (TreeComponent::Tab(path), Some(id)),
+                FloatSource::Group(path) => (TreeComponent::Node(path), None),
             };
+            let valid = self.drag_source_valid(&source, tab_id, tab_viewer);
             if valid {
                 self.float_out(ui.ctx(), source, rect, host, tab_viewer);
             }
@@ -459,7 +465,9 @@ impl<Tab> DockArea<'_, Tab> {
                     // Out of every dock, once the space's floats are drawn: a float.
                     TabDestination::Window(rect) if self.floats_on() => {
                         let host = self.release_host(rect.min);
-                        self.to_float.push((source, rect, host, tab_id));
+                        if let Some(pending) = PendingFloat::from_drag(source, rect, host, tab_id) {
+                            self.to_float.push(pending);
+                        }
                     }
                     destination => {
                         self.apply_move(source, destination, tab_viewer);

@@ -497,11 +497,13 @@ impl<Tab> DockArea<'_, Tab> {
         state.tab_press = None;
         state.reset_drag();
         state.dragged = None;
+        state.dragged_node = None;
         state.tab_in_air = None;
         ui.memory_mut(|mem| {
             mem.data.remove_temp::<Option<DragData>>(self.id.with("drag_data"));
         });
         ui.ctx().stop_dragging();
+        ui.ctx().request_repaint();
     }
 
     /// Whether the drag begun in this area lost its release, which it then cancels: the window

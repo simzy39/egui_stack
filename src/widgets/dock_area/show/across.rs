@@ -57,6 +57,9 @@ impl<Tab> DockArea<'_, Tab> {
             // any preview from the invalid session even when this viewport is its target.
             state.dnd = None;
             state.window_fade = None;
+            state.dragged = None;
+            state.dragged_node = None;
+            state.tab_in_air = None;
             self.forget_verdicts();
             ui.ctx().request_repaint();
         }

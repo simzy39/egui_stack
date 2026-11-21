@@ -84,17 +84,18 @@ pub(crate) enum Outcome {
 }
 
 impl DragSession {
-    /// A session for `src` dragged in `source`.
-    /// Whether what is dragged is still in `state`, at the same place.
+    /// Whether the cached source location still exists in `state`.
+    /// Logical tab identity is checked separately by the dock area before interaction.
     pub(crate) fn source_in<Tab>(&self, state: &crate::DockState<Tab>) -> bool {
         match self.payload {
-            DragSource::Group(path) => state.leaf(path).is_ok(),
+            DragSource::Group(path) => state.leaf(path).is_ok_and(|leaf| !leaf.tabs.is_empty()),
             DragSource::Tab { path, .. } => state
                 .leaf(path.node_path())
                 .is_ok_and(|leaf| path.tab.0 < leaf.tabs.len()),
         }
     }
 
+    /// A session for a payload dragged in the source viewport.
     pub(crate) fn new(
         payload: DragSource,
         rect: Rect,

@@ -1130,6 +1130,37 @@ mod test {
     }
 
     #[test]
+    fn rejected_group_move_does_not_consume_source_tabs() {
+        let mut dock = DockState::new(vec!["a", "b"]);
+        let [left, right] = dock.main_surface_mut().split_right(
+            NodeIndex::root(), 0.5, vec!["c"],
+        );
+        let source = NodePath::new(SurfaceIndex::main(), left);
+        let destination = NodePath::new(SurfaceIndex::main(), right);
+        assert!(!dock.move_node(
+            source,
+            TabDestination::Node(destination, TabInsert::Insert(TabIndex(2))),
+        ));
+        assert_eq!(dock.leaf(source).unwrap().tabs, ["a", "b"]);
+        assert_eq!(dock.leaf(destination).unwrap().tabs, ["c"]);
+    }
+
+    #[test]
+    fn moving_group_between_leaves_preserves_active_member() {
+        let mut dock = DockState::new(vec!["a", "b"]);
+        let [left, right] = dock.main_surface_mut().split_right(
+            NodeIndex::root(), 0.5, vec!["c"],
+        );
+        let source = NodePath::new(SurfaceIndex::main(), left);
+        let destination = NodePath::new(SurfaceIndex::main(), right);
+        dock.leaf_mut(source).unwrap().active = TabIndex(1);
+        assert!(dock.move_node(source, TabDestination::Node(destination, TabInsert::Append)));
+        let leaf = dock.leaf(destination).unwrap();
+        assert_eq!(leaf.tabs, ["c", "a", "b"]);
+        assert_eq!(leaf.active, TabIndex(2));
+    }
+
+    #[test]
     fn retain_none_then_push() {
         let mut t = DockState::new(vec![]);
         t.push_to_focused_leaf(0);

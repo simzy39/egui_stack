@@ -484,11 +484,14 @@ impl<Tab> DockState<Tab> {
                         self[dst.surface].split(dst.node, split, 0.5, Node::leaf(tab));
                     }
                     TabInsert::Insert(index) => {
-                        // Clamp index to valid range: after remove_tab the node may have fewer tabs
-                        // than the original index (e.g. when reordering within the same node).
-                        let count = self[dst.surface][dst.node].tabs_count();
-                        let clamped = TabIndex(count.min(index.0));
-                        self[dst.surface][dst.node].insert_tab(clamped, tab);
+                        // Insertion indices describe the destination before removal.
+                        // Removing an earlier tab shifts later slots left by one.
+                        let insertion = if src.node_path() == dst && src.tab.0 < index.0 {
+                            index.0 - 1
+                        } else {
+                            index.0
+                        };
+                        self[dst.surface][dst.node].insert_tab(TabIndex(insertion), tab);
                     }
                     TabInsert::Append => self[dst.surface][dst.node].append_tab(tab),
                 }
@@ -1106,6 +1109,24 @@ mod test {
             TabDestination::Node(root, TabInsert::Append),
         ));
         assert_eq!(dock.leaf(root).unwrap().tabs, ["b", "c", "a"]);
+    }
+
+    #[test]
+    fn same_leaf_insert_uses_pre_removal_destination_slots() {
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        for (from, to, expected) in [
+            (0, 2, ["b", "a", "c"]),
+            (0, 3, ["b", "c", "a"]),
+            (2, 0, ["c", "a", "b"]),
+            (2, 1, ["a", "c", "b"]),
+        ] {
+            let mut dock = DockState::new(vec!["a", "b", "c"]);
+            assert!(dock.move_tab(
+                TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(from)),
+                TabDestination::Node(root, TabInsert::Insert(TabIndex(to))),
+            ));
+            assert_eq!(dock.leaf(root).unwrap().tabs, expected);
+        }
     }
 
     #[test]

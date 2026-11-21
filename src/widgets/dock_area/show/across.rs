@@ -1109,6 +1109,41 @@ mod tests {
     }
 
     #[test]
+    fn remote_release_moves_retained_tab_to_another_leaf() {
+        let mut dock = DockState::new(vec!["source", "remaining"]);
+        let [left, right] = dock.main_surface_mut().split_right(
+            NodeIndex::root(), 0.5, vec!["target"],
+        );
+        let source_path = TabPath::new(SurfaceIndex::main(), left, TabIndex(0));
+        let destination_path = NodePath::new(SurfaceIndex::main(), right);
+        let rect = Rect::from_min_size(Pos2::ZERO, egui::vec2(200.0, 100.0));
+        let mut viewer = Viewer { allow_windows: true };
+        let mut area = DockArea::new(&mut dock);
+        let source = DragSource::Tab {
+            path: source_path,
+            id: area.tab_identity(source_path, &mut viewer).unwrap(),
+        };
+        let session = DragSession::new(source, rect, egui::ViewportId::ROOT, Pos2::ZERO);
+        assert!(area.drag_source_valid(session.payload, &mut viewer));
+        area.release_over(
+            Report {
+                stamp: 0,
+                rank: 0,
+                outcome: Outcome::Drop(TabDestination::Node(
+                    destination_path,
+                    TabInsert::Append,
+                )),
+                unfold: None,
+            },
+            session.payload,
+            rect,
+            &mut viewer,
+        );
+        assert_eq!(area.dock_state.leaf(source_path.node_path()).unwrap().tabs, ["remaining"]);
+        assert_eq!(area.dock_state.leaf(destination_path).unwrap().tabs, ["target", "source"]);
+    }
+
+    #[test]
     fn cross_viewport_tab_session_rejects_replaced_tab_in_unchanged_slot() {
         let mut dock = DockState::new(vec!["original", "other"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());

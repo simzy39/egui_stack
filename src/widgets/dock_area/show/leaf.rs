@@ -1879,18 +1879,23 @@ impl<Tab> DockArea<'_, Tab> {
         let Some(pointer_pos) = ui.ctx().pointer_interact_pos() else {
             return;
         };
+        // Never establish a drag start for a handle which did not own the press.
+        // In particular, a newly created handle must not inherit an ongoing gesture.
+        let Some(press @ GroupPress {
+            source: DragSource::Group { id, .. },
+            ..
+        }) = state.group_press else {
+            return;
+        };
+        if !press.matches(widget, path, id) || !self.group_source_valid(path, id) {
+            self.cancel_tab_drag(ui, state);
+            return;
+        }
         let start = *state
             .drag_start
             .get_or_insert_with(|| Self::press_origin(ui, pointer_pos));
         let delta = pointer_pos - start;
         if self.drag_activated(delta) {
-            let Some(press @ GroupPress { source: DragSource::Group { id, .. }, .. }) = state.group_press else {
-                return;
-            };
-            if !press.matches(widget, path, id) || !self.group_source_valid(path, id) {
-                self.cancel_tab_drag(ui, state);
-                return;
-            }
             let source = DragSource::Group { path, id };
             state.dragged_node = Some(DraggedNode {
                 path,
@@ -1916,7 +1921,9 @@ impl<Tab> DockArea<'_, Tab> {
             && state.drag_lost.is_none()
             && ui.input(|i| i.pointer.primary_down())
         {
-            state.group_press = self.group_drag_source(path).map(|source| GroupPress { widget, source });
+            state.group_press = self
+                .group_drag_source(path)
+                .map(|source| GroupPress { widget, source });
         }
     }
 

@@ -140,12 +140,19 @@ mod retained_source_tests {
             path: NodePath::new(SurfaceIndex::main(), crate::NodeIndex::root()),
             id: 7,
         };
-        let press = GroupPress { widget: Id::new("original"), source };
+        let press = GroupPress {
+            widget: Id::new("original"),
+            source,
+        };
         let root = NodePath::new(SurfaceIndex::main(), crate::NodeIndex::root());
         assert!(press.matches(Id::new("original"), root, 7));
         assert!(!press.matches(Id::new("replacement"), root, 7));
         assert!(!press.matches(Id::new("original"), root, 8));
-        assert!(!press.matches(Id::new("original"), NodePath::new(SurfaceIndex::main(), crate::NodeIndex(1)), 7));
+        assert!(!press.matches(
+            Id::new("original"),
+            NodePath::new(SurfaceIndex::main(), crate::NodeIndex(1)),
+            7,
+        ));
     }
 
     #[test]

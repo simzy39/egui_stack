@@ -342,7 +342,7 @@ impl<Tab> DockArea<'_, Tab> {
             return;
         }
         let src = source.component();
-        match report.outcome {
+        match report.outcome.clone() {
             Outcome::Drop(destination) => {
                 if !self.resolve_reported_destination(&destination, &report, tab_viewer) {
                     return;

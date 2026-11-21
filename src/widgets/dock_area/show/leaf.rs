@@ -187,6 +187,14 @@ impl<Tab> DockArea<'_, Tab> {
             self.hidden_tab_bar_controls(ui, state, path, tabbar_rect, style, tab_viewer);
         }
 
+        // Body handles report their press separately from drag activation.
+        let press_request = BodyLeaf::press_id(self.id);
+        if let Some(handle_path) = ui.data_mut(|d| d.remove_temp::<NodePath>(press_request))
+            && handle_path == path
+            && self.draggable_tabs
+        {
+            self.remember_group_press(ui, state, path);
+        }
         // A handle of the body (`DockArea::drag_group_by`) asked to drag the group.
         let request = BodyLeaf::request_id(self.id);
         if let Some(handle_path) = ui.data_mut(|d| d.remove_temp::<NodePath>(request))

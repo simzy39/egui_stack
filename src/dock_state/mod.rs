@@ -165,7 +165,6 @@ impl<Tab> DockState<Tab> {
     pub fn new(tabs: Vec<Tab>) -> Self {
         Self {
             surfaces: vec![SurfaceSlot::new(Surface::Main(Tree::new(tabs)))],
-            surface_identities: Vec::new(),
             focused_surface: None,
             translations: Translations::english(),
         }
@@ -895,7 +894,9 @@ impl<Tab> DockState<Tab> {
 
     /// Returns a mutable [`Iterator`] over all surfaces.
     pub fn iter_surfaces_mut(&mut self) -> impl Iterator<Item = &mut Surface<Tab>> {
-        for slot in &mut self.surfaces { slot.identity = 0; }
+        for slot in &mut self.surfaces {
+            slot.identity = 0;
+        }
         self.surfaces.iter_mut().map(|slot| &mut slot.surface)
     }
 
@@ -903,7 +904,9 @@ impl<Tab> DockState<Tab> {
     pub fn iter_surfaces_mut_indexed(
         &mut self,
     ) -> impl Iterator<Item = (SurfaceIndex, &mut Surface<Tab>)> {
-        for slot in &mut self.surfaces { slot.identity = 0; }
+        for slot in &mut self.surfaces {
+            slot.identity = 0;
+        }
         self.surfaces
             .iter_mut()
             .enumerate()
@@ -1032,14 +1035,13 @@ impl<Tab> DockState<Tab> {
             .iter()
             .map(|slot| SurfaceSlot::new(slot.surface.filter_map_tabs(&mut function)))
             .collect();
-        while surfaces.len() > 1 && surfaces.last().is_some_and(Surface::is_empty) {
+        while surfaces.len() > 1 && surfaces.last().is_some_and(|slot| slot.is_empty()) {
             surfaces.pop();
         }
         let focused_surface = focused_surface
             .filter(|focused| surfaces.get(focused.0).is_some_and(|s| !s.is_empty()));
         DockState {
             surfaces,
-            surface_identities: Vec::new(),
             focused_surface,
             translations: translations.clone(),
         }
@@ -1102,14 +1104,16 @@ impl<Tab> DockState<Tab> {
         // Retention may change tab order, remove nodes, or replace an occupied
         // window with a vacancy. Invalidate *before* invoking user code so even
         // a retained drag report cannot outlive a reentrant structural edit.
-        for slot in &mut self.surfaces { slot.identity = 0; }
+        for slot in &mut self.surfaces {
+            slot.identity = 0;
+        }
         for slot in &mut self.surfaces {
             match &mut slot.surface {
                 Surface::Main(tree) => tree.retain_tabs(&mut predicate),
                 surface => surface.retain_tabs(&mut predicate),
             }
         }
-        while self.surfaces.len() > 1 && self.surfaces.last().is_some_and(Surface::is_empty) {
+        while self.surfaces.len() > 1 && self.surfaces.last().is_some_and(|slot| slot.is_empty()) {
             let index = self.surfaces.len() - 1;
             self.invalidate_surface_identity(SurfaceIndex(index));
             self.surfaces.pop();

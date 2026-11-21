@@ -265,11 +265,6 @@ impl<Tab> DockArea<'_, Tab> {
         tab_viewer: &mut impl TabViewer<Tab = Tab>,
     ) {
         let viewport = ui.ctx().viewport_id();
-        let destination_surface_identity = match &outcome {
-            Outcome::Drop(TabDestination::Node(path, _)) => self.dock_state.capture_surface_identity(path.surface),
-            Outcome::Drop(TabDestination::EmptySurface(surface)) => self.dock_state.capture_surface_identity(*surface),
-            _ => None,
-        };
         let destination_identity = match &outcome {
             Outcome::Drop(TabDestination::Node(path, _)) => {
                 self.capture_destination_identity(*path)
@@ -282,6 +277,17 @@ impl<Tab> DockArea<'_, Tab> {
                 .leaf_mut(*path)
                 .ok()
                 .map(|leaf| leaf.tabs.iter_mut().map(|tab| tab_viewer.id(tab)).collect()),
+            _ => None,
+        };
+        // Capture the slot identity after all destination inspections: inspecting
+        // nodes or tabs may require mutable access and invalidate a prior token.
+        let destination_surface_identity = match &outcome {
+            Outcome::Drop(TabDestination::Node(path, _)) => {
+                self.dock_state.capture_surface_identity(path.surface)
+            }
+            Outcome::Drop(TabDestination::EmptySurface(surface)) => {
+                self.dock_state.capture_surface_identity(*surface)
+            }
             _ => None,
         };
         let Some(space) = self.space.as_mut() else {

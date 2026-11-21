@@ -432,6 +432,30 @@ mod custom_handle_request_tests {
     }
 
     #[test]
+    fn a_replaced_leaf_cannot_take_over_a_pending_handle_request() {
+        use crate::{NodeIndex, SurfaceIndex};
+        let ctx = Context::default();
+        let key = BodyLeaf::request_id(Id::new("dock"));
+        let path = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
+        let original = DragSource::Group { path, id: 41 };
+        let replacement = DragSource::Group { path, id: 42 };
+        let old_handle = Id::new("old-handle");
+        let new_handle = Id::new("new-handle");
+
+        ctx.data_mut(|data| {
+            BodyLeaf::retain_first_request(data, key, 7, (Some(original), old_handle));
+            BodyLeaf::retain_first_request(data, key, 7, (Some(replacement), new_handle));
+            // The pending request is tied to the original identity, even though
+            // the new leaf occupies the exact same node path.
+            assert_eq!(
+                BodyLeaf::take_request_for_leaf(data, key, 7, path),
+                Some((original, old_handle)),
+            );
+            assert_eq!(BodyLeaf::take_request_for_leaf(data, key, 7, path), None);
+        });
+    }
+
+    #[test]
     fn stale_request_is_not_eligible_in_another_pass() {
         let ctx = Context::default();
         let key = BodyLeaf::press_id(Id::new("dock"));

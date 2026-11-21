@@ -58,11 +58,18 @@ impl<Tab: Clone> Clone for LeafNode<Tab> {
     }
 }
 
+fn allocate_drag_identity(counter: &AtomicU64) -> u64 {
+    counter
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |next| {
+            (next != 0).then(|| next.checked_add(1)).flatten()
+        })
+        .unwrap_or_else(|_| panic!("leaf drag identity exhausted"))
+}
+
 impl<Tab> LeafNode<Tab> {
     pub(crate) fn ensure_drag_identity(&mut self) -> u64 {
         if self.drag_identity == 0 {
-            self.drag_identity = NEXT_LEAF_DRAG_ID.fetch_add(1, Ordering::Relaxed);
-            assert_ne!(self.drag_identity, 0, "leaf drag identity exhausted");
+            self.drag_identity = allocate_drag_identity(&NEXT_LEAF_DRAG_ID);
         }
         self.drag_identity
     }
@@ -221,5 +228,50 @@ mod removal_tests {
         assert_eq!(leaf.remove_tab(TabIndex(0)), Some("first"));
         assert_eq!(leaf.tabs, ["second"]);
         assert_eq!(leaf.active, TabIndex(0));
+    }
+}
+
+
+#[cfg(test)]
+mod drag_identity_tests {
+    use super::*;
+
+    #[test]
+    fn allocator_returns_unique_nonzero_identities() {
+        let counter = AtomicU64::new(1);
+        assert_eq!(allocate_drag_identity(&counter), 1);
+        assert_eq!(allocate_drag_identity(&counter), 2);
+        assert_eq!(counter.load(Ordering::Relaxed), 3);
+    }
+
+    #[test]
+    fn allocator_exhaustion_never_wraps_or_reuses_an_identity() {
+        let counter = AtomicU64::new(u64::MAX - 1);
+        assert_eq!(allocate_drag_identity(&counter), u64::MAX - 1);
+        assert_eq!(counter.load(Ordering::Relaxed), u64::MAX);
+
+        let exhausted = std::panic::catch_unwind(|| allocate_drag_identity(&counter));
+        assert!(exhausted.is_err());
+        assert_eq!(counter.load(Ordering::Relaxed), u64::MAX);
+    }
+
+    #[test]
+    fn allocator_rejects_the_unassigned_zero_sentinel() {
+        let counter = AtomicU64::new(0);
+        let exhausted = std::panic::catch_unwind(|| allocate_drag_identity(&counter));
+        assert!(exhausted.is_err());
+        assert_eq!(counter.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn cloned_leaves_receive_distinct_runtime_identities() {
+        let mut original = LeafNode::new(vec!["tab"]);
+        let original_id = original.ensure_drag_identity();
+        let mut cloned = original.clone();
+        let cloned_id = cloned.ensure_drag_identity();
+
+        assert_ne!(original_id, cloned_id);
+        assert_eq!(original.ensure_drag_identity(), original_id);
+        assert_eq!(cloned.ensure_drag_identity(), cloned_id);
     }
 }

@@ -1887,9 +1887,8 @@ impl<Tab> DockArea<'_, Tab> {
             let Some(DragSource::Group { path: original, id }) = state.group_press else {
                 return;
             };
-            if original != path || !self.group_source_valid(path, id)
-            {
-                state.tab_drag_cancelled = true;
+            if original != path || !self.group_source_valid(path, id) {
+                self.cancel_tab_drag(ui, state);
                 return;
             }
             let source = DragSource::Group { path, id };
@@ -1912,6 +1911,7 @@ impl<Tab> DockArea<'_, Tab> {
     /// Capture a group source at pointer-down, before the drag threshold.
     fn remember_group_press(&mut self, ui: &Ui, state: &mut State, path: NodePath) {
         if state.group_press.is_none()
+            && state.tab_press.is_none()
             && !state.tab_drag_cancelled
             && state.drag_lost.is_none()
             && ui.input(|i| i.pointer.primary_down())

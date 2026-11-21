@@ -312,6 +312,8 @@ impl<Tab> DockArea<'_, Tab> {
                 ui.ctx().stop_dragging();
             }
             state.reset_drag();
+            state.tab_press = None;
+            state.group_press = None;
             state.tab_in_air = None;
             self.forget_verdicts();
         }
@@ -355,6 +357,8 @@ impl<Tab> DockArea<'_, Tab> {
         {
             drag_data = None;
             state.reset_drag();
+            state.tab_press = None;
+            state.group_press = None;
             state.tab_in_air = None;
         }
         let hover_data = if drag_data.is_some() {
@@ -559,6 +563,8 @@ impl<Tab> DockArea<'_, Tab> {
         });
         if lost {
             state.drag_lost = Some(dragged);
+            state.tab_press = None;
+            state.group_press = None;
             ctx.stop_dragging();
         }
         lost

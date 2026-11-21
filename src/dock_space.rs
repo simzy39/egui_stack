@@ -1146,7 +1146,7 @@ impl<Tab> DockSpace<Tab> {
     ///
     /// Transfers float configuration and unconsumed events. Pending opens and window metadata
     /// are retained only for floating docks that still exist in the replacement space.
-    /// A drag session is retained only when its source still matches the replacement state.
+    /// A drag session is retained only when its source still matches the replacement state;\n    /// old target reports and deferred releases are discarded until the new layout is drawn.
     /// Existing origin records in the replacement take precedence over transferred records.
     ///
     /// The replacement layout is authoritative: this method does not recreate removed docks
@@ -1165,6 +1165,13 @@ impl<Tab> DockSpace<Tab> {
             .is_some_and(|session| !session.source_in(&self.state))
         {
             floating.session = None;
+        }
+        if let Some(session) = floating.session.as_mut() {
+            // Reports describe drop targets in the previous layout. Even when
+            // the dragged source survives, their node paths may now identify
+            // different targets. Wait for fresh viewport reports before release.
+            session.reports.clear();
+            session.released = None;
         }
         // Floating metadata keyed by a dock name is only meaningful when the
         // replacement space still owns that floating dock.

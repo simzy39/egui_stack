@@ -189,19 +189,19 @@ impl<Tab> DockArea<'_, Tab> {
 
         // Body handles report their press separately from drag activation.
         let press_request = BodyLeaf::press_id(self.id);
-        if let Some(handle_path) = ui.data_mut(|d| d.remove_temp::<NodePath>(press_request))
+        if let Some((handle_path, handle_id)) = ui.data_mut(|d| d.remove_temp::<(NodePath, Id)>(press_request))
             && handle_path == path
             && self.draggable_tabs
         {
-            self.remember_group_press(ui, state, path);
+            self.remember_group_press(ui, state, handle_id, path);
         }
         // A handle of the body (`DockArea::drag_group_by`) asked to drag the group.
         let request = BodyLeaf::request_id(self.id);
-        if let Some(handle_path) = ui.data_mut(|d| d.remove_temp::<NodePath>(request))
+        if let Some((handle_path, handle_id)) = ui.data_mut(|d| d.remove_temp::<(NodePath, Id)>(request))
             && handle_path == path
             && self.draggable_tabs
         {
-            self.try_initiate_node_drag(ui, state, path);
+            self.try_initiate_node_drag(ui, state, handle_id, path);
         }
 
         let tabs = self.dock_state[path]
@@ -309,7 +309,7 @@ impl<Tab> DockArea<'_, Tab> {
             .is_none_or(|h| h > 0.0);
         if self.draggable_tabs && drag_enabled && !on_button {
             if self.hidden_tab_bar_drags_group && drag_response.is_pointer_button_down_on() {
-                self.remember_group_press(ui, state, path);
+                self.remember_group_press(ui, state, drag_id, path);
             }
             if !self.hidden_tab_bar_drags_group && drag_response.is_pointer_button_down_on() {
                 let active = self.dock_state.leaf(path).unwrap().active;
@@ -323,7 +323,7 @@ impl<Tab> DockArea<'_, Tab> {
             if is_being_dragged {
                 ui.output_mut(|o| o.cursor_icon = CursorIcon::Grabbing);
                 if self.hidden_tab_bar_drags_group {
-                    self.try_initiate_node_drag(ui, state, path);
+                    self.try_initiate_node_drag(ui, state, drag_id, path);
                 } else {
                     let active = self.dock_state[path]
                         .get_leaf()
@@ -869,7 +869,7 @@ impl<Tab> DockArea<'_, Tab> {
                 let carries_group = *state.drag_carries_group
                     .get_or_insert_with(|| self.modifiers_carry_group(tabs_ui));
                 if carries_group {
-                    self.remember_group_press(tabs_ui, state, path);
+                    self.remember_group_press(tabs_ui, state, id, path);
                 } else {
                     self.remember_tab_press(tabs_ui, state, id, (path, tab_index).into(), tab_viewer);
                 }
@@ -879,7 +879,7 @@ impl<Tab> DockArea<'_, Tab> {
                 let carries_group = state.drag_carries_group.unwrap_or(false);
                 if carries_group {
                     state.tab_press = None;
-                    self.try_initiate_node_drag(tabs_ui, state, path);
+                    self.try_initiate_node_drag(tabs_ui, state, id, path);
                 } else {
                     self.try_initiate_tab_drag(tabs_ui, state, id, (path, tab_index).into(), tab_viewer);
                 }
@@ -1361,7 +1361,7 @@ impl<Tab> DockArea<'_, Tab> {
         }
         let response = ui.interact(tail, id, sense);
         if drag && response.is_pointer_button_down_on() {
-            self.remember_group_press(ui, state, path);
+            self.remember_group_press(ui, state, id, path);
         }
         if drag {
             if response.hovered() && ui.ctx().dragged_id().is_none() {
@@ -1371,7 +1371,7 @@ impl<Tab> DockArea<'_, Tab> {
                 ui.ctx().is_being_dragged(id) && ui.input(|i| i.pointer.is_decidedly_dragging());
             if dragged {
                 ui.output_mut(|o| o.cursor_icon = CursorIcon::Grabbing);
-                self.try_initiate_node_drag(ui, state, path);
+                self.try_initiate_node_drag(ui, state, id, path);
             }
         }
         if menu {
@@ -1715,7 +1715,7 @@ impl<Tab> DockArea<'_, Tab> {
             .with("group_grip");
         let response = ui.interact(rect, id, Sense::click_and_drag());
         if response.is_pointer_button_down_on() {
-            self.remember_group_press(ui, state, path);
+            self.remember_group_press(ui, state, id, path);
         }
         let enabled = ui.is_enabled();
         response
@@ -1725,7 +1725,7 @@ impl<Tab> DockArea<'_, Tab> {
             ui.ctx().is_being_dragged(id) && ui.input(|i| i.pointer.is_decidedly_dragging());
         if dragged {
             ui.output_mut(|o| o.cursor_icon = CursorIcon::Grabbing);
-            self.try_initiate_node_drag(ui, state, path);
+            self.try_initiate_node_drag(ui, state, id, path);
         } else if response.hovered() && ui.ctx().dragged_id().is_none() {
             ui.output_mut(|o| o.cursor_icon = CursorIcon::Grab);
         }
@@ -1872,7 +1872,7 @@ impl<Tab> DockArea<'_, Tab> {
     }
 
     /// As [`try_initiate_tab_drag`](Self::try_initiate_tab_drag), for a whole leaf.
-    fn try_initiate_node_drag(&mut self, ui: &Ui, state: &mut State, path: NodePath) {
+    fn try_initiate_node_drag(&mut self, ui: &Ui, state: &mut State, widget: Id, path: NodePath) {
         if state.tab_drag_cancelled || state.drag_lost.is_some() {
             return;
         }
@@ -1884,10 +1884,10 @@ impl<Tab> DockArea<'_, Tab> {
             .get_or_insert_with(|| Self::press_origin(ui, pointer_pos));
         let delta = pointer_pos - start;
         if self.drag_activated(delta) {
-            let Some(DragSource::Group { path: original, id }) = state.group_press else {
+            let Some(GroupPress { widget: original_widget, source: DragSource::Group { path: original, id } }) = state.group_press else {
                 return;
             };
-            if original != path || !self.group_source_valid(path, id) {
+            if original_widget != widget || original != path || !self.group_source_valid(path, id) {
                 self.cancel_tab_drag(ui, state);
                 return;
             }
@@ -1909,14 +1909,14 @@ impl<Tab> DockArea<'_, Tab> {
     }
 
     /// Capture a group source at pointer-down, before the drag threshold.
-    fn remember_group_press(&mut self, ui: &Ui, state: &mut State, path: NodePath) {
+    fn remember_group_press(&mut self, ui: &Ui, state: &mut State, widget: Id, path: NodePath) {
         if state.group_press.is_none()
             && state.tab_press.is_none()
             && !state.tab_drag_cancelled
             && state.drag_lost.is_none()
             && ui.input(|i| i.pointer.primary_down())
         {
-            state.group_press = self.group_drag_source(path);
+            state.group_press = self.group_drag_source(path).map(|source| GroupPress { widget, source });
         }
     }
 

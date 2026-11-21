@@ -13,6 +13,12 @@ pub(super) struct TabPress {
     pub tab_id: Id,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct GroupPress {
+    pub widget: Id,
+    pub source: DragSource,
+}
+
 #[derive(Clone, Debug, Default)]
 pub(super) struct State {
     pub drag_start: Option<Pos2>,
@@ -20,7 +26,7 @@ pub(super) struct State {
     /// Kept until release, independently of the drag's activation distance.
     pub tab_press: Option<TabPress>,
     /// Retained leaf identity from pointer-down, before drag activation.
-    pub group_press: Option<DragSource>,
+    pub group_press: Option<GroupPress>,
     /// The original source changed; suppress dock drags until the primary button is up.
     pub tab_drag_cancelled: bool,
     pub last_hover_pos: Option<Pos2>,
@@ -121,11 +127,25 @@ mod retained_source_tests {
     use super::*;
 
     #[test]
+    fn group_press_retains_widget_and_source() {
+        let source = DragSource::Group {
+            path: NodePath::new(SurfaceIndex::main(), crate::NodeIndex::root()),
+            id: 7,
+        };
+        let press = GroupPress { widget: Id::new("original"), source };
+        assert_ne!(press.widget, Id::new("replacement"));
+        assert_eq!(press.source, source);
+    }
+
+    #[test]
     fn finishing_a_drag_clears_both_sources_and_modifier_mode() {
         let mut state = State {
-            group_press: Some(DragSource::Group {
-                path: NodePath::new(SurfaceIndex::main(), crate::NodeIndex::root()),
-                id: 42,
+            group_press: Some(GroupPress {
+                widget: Id::new("grip"),
+                source: DragSource::Group {
+                    path: NodePath::new(SurfaceIndex::main(), crate::NodeIndex::root()),
+                    id: 42,
+                },
             }),
             drag_carries_group: Some(true),
             drag_start: Some(Pos2::ZERO),

@@ -202,12 +202,12 @@ impl DockArea<'_, ()> {
             return false;
         }
         if response.is_pointer_button_down_on() {
-            ui.data_mut(|d| d.insert_temp(BodyLeaf::press_id(body.dock_area), body.path));
+            ui.data_mut(|d| d.insert_temp(BodyLeaf::press_id(body.dock_area), (body.path, response.id)));
         }
         let dragged = response.dragged() && ui.input(|i| i.pointer.is_decidedly_dragging());
         if dragged {
             ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::Grabbing);
-            ui.data_mut(|d| d.insert_temp(BodyLeaf::request_id(body.dock_area), body.path));
+            ui.data_mut(|d| d.insert_temp(BodyLeaf::request_id(body.dock_area), (body.path, response.id)));
         } else if response.hovered() && ui.ctx().dragged_id().is_none() {
             ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::Grab);
         }

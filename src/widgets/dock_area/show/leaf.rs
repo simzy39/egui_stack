@@ -889,12 +889,23 @@ impl<Tab> DockArea<'_, Tab> {
             }
 
             if is_being_dragged {
-                let carries_group = state.drag_carries_group.unwrap_or(false);
-                if carries_group {
-                    state.tab_press = None;
-                    self.try_initiate_node_drag(tabs_ui, state, id, path);
-                } else {
-                    self.try_initiate_tab_drag(tabs_ui, state, id, (path, tab_index).into(), tab_viewer);
+                // Only the source retained at pointer-down may activate.
+                // In particular, never reinterpret a group press as a tab
+                // press (or vice versa) when no modifier mode was captured.
+                match state.drag_carries_group {
+                    Some(true) if state.group_press.is_some() => {
+                        self.try_initiate_node_drag(tabs_ui, state, id, path);
+                    }
+                    Some(false) if state.tab_press.is_some() => {
+                        self.try_initiate_tab_drag(
+                            tabs_ui,
+                            state,
+                            id,
+                            (path, tab_index).into(),
+                            tab_viewer,
+                        );
+                    }
+                    _ => {}
                 }
             }
 

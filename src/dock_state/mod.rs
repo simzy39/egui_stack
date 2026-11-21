@@ -204,8 +204,13 @@ impl<Tab> DockState<Tab> {
         let identity = &mut self.surface_identities[index.0];
         if *identity == 0 {
             static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
-            *identity = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            assert_ne!(*identity, 0, "surface identity exhausted");
+            *identity = NEXT
+                .fetch_update(
+                    std::sync::atomic::Ordering::Relaxed,
+                    std::sync::atomic::Ordering::Relaxed,
+                    |next| (next != 0).then(|| next.checked_add(1)).flatten(),
+                )
+                .unwrap_or_else(|_| panic!("surface identity exhausted"));
         }
         Some(*identity)
     }

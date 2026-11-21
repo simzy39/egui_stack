@@ -310,3 +310,38 @@ names and rules; each main tree becomes a dock, and their windows become the spa
 - Detached OS windows as surfaces of the space (a host hook opening the viewport).
 - A hook letting the application decide a move between docks (a step model's veto or redirect)
   after the drop, beyond the verdict shown during the drag.
+
+### Rebuilding a space while floats are open
+
+When rebuilding a `DockSpace` (for example after changing the arrangement of named docks),
+construct the replacement layout first and call
+`replacement.carry_floats_from(&mut previous)` **before drawing it**. Preserve the space ID
+with `DockSpace::with_id` when the rebuilt space represents the same UI.
+
+The replacement space owns the authoritative dock names and surfaces. The transfer carries
+floating runtime configuration, pending opens, unconsumed float events and saved tab origins;
+pending opens and window metadata whose floating dock is absent from the replacement are
+discarded. An active drag is retained only when its source still identifies a valid source
+in the replacement state. Existing origin records in the replacement take precedence.
+
+This is **not** a merge of two live spaces: the replacement's floating runtime state is
+overwritten, and the previous space loses its floating state and saved origins. The method
+does not recreate missing docks or recover their tabs. Transfer tabs and build the intended
+dock layout separately.
+
+### Programmatic tab moves and invalid paths
+
+`DockState::move_tab` and `DockState::move_node` return `false` when their source or
+destination is invalid; validation happens before the source is removed. Moving the last tab
+out of a leaf removes the empty leaf, and an emptied floating window is removed.
+
+`DockState::remove_tab` returns `None` for an invalid tab, and
+`DockState::remove_leaf` returns `false` for invalid paths or non-leaf nodes.
+`DockState::detach_tab` and `DockState::eject_tab` return
+`Option<SurfaceIndex>`: `None` means no window was created because the tab source was
+invalid. Callers must handle these results rather than assuming the operation succeeded.
+
+A saved `TabPlace` describes a preferred restoration position, not a guaranteed
+destination. `DockSpace::restore_at` attempts a usable recorded dock, then its saved
+floating origin, then a remaining non-floating dock. If none exists, it returns the
+tab in `Err(tab)` so the caller retains ownership.

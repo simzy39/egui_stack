@@ -44,6 +44,7 @@ from this repository's main branch.
 - Several docks sharing one drag (`DockSpace`): side areas and a centre, each drawn where the application puts it,
   with no-drop zones (a toolbar, a status bar) where a released tab goes back instead of floating.
 - A veto on every drop (`dock_drop_allowed`), and full control of the layout from code.
+- Fallible programmatic tab and group moves, and safe restoration after a layout rebuild (see [dock-space lifecycle and API contracts](docs/dock-space.md#rebuilding-a-space-while-floats-are-open)).
 
 **Window layout** ([docs/layout-and-dock.md](docs/layout-and-dock.md))
 

@@ -1268,7 +1268,10 @@ pub(crate) fn detach<Tab>(
     id_of: &mut dyn FnMut(&mut Tab) -> Id,
 ) -> Option<String> {
     let (node, tabs) = match source {
-        Detach::Tab(path) => (path.node_path(), path.tab.0..path.tab.0 + 1),
+        Detach::Tab(path) => {
+            let end = path.tab.0.checked_add(1)?;
+            (path.node_path(), path.tab.0..end)
+        },
         Detach::Group(path) => (path, 0..state.leaf(path).ok()?.tabs.len()),
     };
     let from_float = state.is_window(node.surface)
@@ -1486,6 +1489,22 @@ mod detach_tests {
         assert!(space.floating.pending.is_empty());
         assert!(space.origins.is_empty());
         assert_eq!(space.state[surface][NodeIndex::root()].tabs_count(), 2);
+    }
+
+    #[test]
+    fn invalid_maximum_tab_index_is_rejected_without_overflow() {
+        let mut space = DockSpace::new();
+        let surface = space.add_dock("editor", DockRules::default(), vec!["one"]);
+        let bad = TabPath::new(surface, NodeIndex::root(), TabIndex(usize::MAX));
+        assert!(detach(
+            &mut space.state, &mut space.docks, &mut space.origins,
+            &mut space.floating, Detach::Tab(bad), float_rect(), None,
+            FloatHost::Native, &mut id,
+        ).is_none());
+        assert_eq!(space.docks.len(), 1);
+        assert_eq!(space.floating.next, 0);
+        assert!(space.floating.pending.is_empty());
+        assert_eq!(space.state[surface][NodeIndex::root()].tabs_count(), 1);
     }
 
     #[test]

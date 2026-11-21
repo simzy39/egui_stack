@@ -278,7 +278,7 @@ impl Floating {
         if session.source == viewport {
             self.session = None;
         } else if let Some(report) = session.reports.remove(&viewport)
-            && report.stamp + 1 >= session.pass
+            && report.stamp.saturating_add(1) >= session.pass
         {
             session.cancelled = true;
             session.reports.clear();

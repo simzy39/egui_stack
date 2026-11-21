@@ -153,16 +153,14 @@ impl<Tab> LeafNode<Tab> {
         self.active = tab_index;
     }
 
-    /// Remove a ``Tab`` to this [`LeafNode`]s tab list at the specified [`TabIndex`].
-    ///
-    /// This will also focus the added tab.'
-    ///
-    /// # Panics
-    ///
-    /// if ``tab_index`` is out of bounds for the tab list
+    /// Remove the tab at `tab_index`, returning `None` when out of bounds.
+    /// An invalid index leaves both the tabs and active selection unchanged.
     #[inline]
     pub fn remove_tab(&mut self, tab_index: impl Into<TabIndex>) -> Option<Tab> {
         let index = tab_index.into();
+        if index.0 >= self.tabs.len() {
+            return None;
+        }
         if index <= self.active {
             self.active.0 = self.active.0.saturating_sub(1);
         }
@@ -205,5 +203,23 @@ impl<Tab> ops::Index<TabIndex> for LeafNode<Tab> {
 impl<Tab> ops::IndexMut<TabIndex> for LeafNode<Tab> {
     fn index_mut(&mut self, index: TabIndex) -> &mut Tab {
         &mut self.tabs[index.0]
+    }
+}
+
+#[cfg(test)]
+mod removal_tests {
+    use super::*;
+
+    #[test]
+    fn invalid_removal_preserves_tabs_and_active_selection() {
+        let mut leaf = LeafNode::new(vec!["first", "second"]);
+        leaf.active = TabIndex(1);
+        assert_eq!(leaf.remove_tab(TabIndex(2)), None);
+        assert_eq!(leaf.remove_tab(TabIndex(usize::MAX)), None);
+        assert_eq!(leaf.tabs, ["first", "second"]);
+        assert_eq!(leaf.active, TabIndex(1));
+        assert_eq!(leaf.remove_tab(TabIndex(0)), Some("first"));
+        assert_eq!(leaf.tabs, ["second"]);
+        assert_eq!(leaf.active, TabIndex(0));
     }
 }

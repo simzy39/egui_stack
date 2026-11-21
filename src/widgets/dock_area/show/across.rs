@@ -444,6 +444,9 @@ impl<Tab> DockArea<'_, Tab> {
     /// Whether a destination still refers to a usable surface or leaf.
     pub(super) fn destination_valid(&self, destination: &TabDestination) -> bool {
         match *destination {
+            TabDestination::Node(path, TabInsert::Split(_)) => {
+                self.dock_state.node(path).is_ok()
+            }
             TabDestination::Node(path, ref insert) => {
                 self.dock_state.leaf(path).is_ok_and(|leaf| match insert {
                     TabInsert::Insert(index) => index.0 <= leaf.tabs.len(),
@@ -453,8 +456,7 @@ impl<Tab> DockArea<'_, Tab> {
             TabDestination::EmptySurface(surface) => self
                 .dock_state
                 .get_surface(surface)
-                .and_then(Surface::node_tree)
-                .is_some_and(|tree| tree.is_empty()),
+                .is_some_and(Surface::is_empty),
             TabDestination::Window(_) => true,
         }
     }

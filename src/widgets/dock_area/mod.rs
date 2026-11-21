@@ -84,7 +84,6 @@ struct PendingFloat {
     host: Option<crate::layout::FloatHost>,
 }
 
-
 /// The dock of a [`DockSpace`](crate::DockSpace) a [`DockArea`] shows, and the space's docks.
 struct SpaceDock<'a, Tab> {
     docks: &'a mut Vec<Dock>,

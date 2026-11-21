@@ -182,8 +182,7 @@ impl<Tab> DockArea<'_, Tab> {
         // Removal and group moves above can change a previously validated drag's source.
         // Recheck immediately before executing the deferred float.
         for PendingFloat { source, rect, host } in std::mem::take(&mut self.to_float) {
-            let valid = self.drag_source_valid(source, tab_viewer);
-            if valid {
+            if self.drag_source_valid(source, tab_viewer) {
                 self.float_out(ui.ctx(), source.component(), rect, host, tab_viewer);
             }
         }

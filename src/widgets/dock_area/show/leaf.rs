@@ -15,7 +15,7 @@ use crate::{
     TabBarGripPaint, TabBarPaint, TabBarTailPaint, TabBodyPaint, TabClose, TabDestination,
     TabFocus, TabIndex, TabInsert, TabMeasure, TabPaint, TabStyle, TabViewer,
     dock_area::{
-        drag_and_drop::{DragSource, DragData, DragDropState, HoverData, TreeComponent},
+        drag_and_drop::{DragData, DragDropState, DragSource, HoverData, TreeComponent},
         state::{State, TabPress},
     },
     utils::{fade_visuals, rect_set_size_centered},
@@ -28,7 +28,9 @@ fn tab_body_id(dock_area_id: Id, path: NodePath, tab_id: Id) -> Id {
 
 /// A tab header follows the logical tab across leaves and reordering within a surface.
 fn tab_widget_id(dock_area_id: Id, path: NodePath, tab_id: Id) -> Id {
-    dock_area_id.with((path.surface, "surface")).with(("tab-header", tab_id))
+    dock_area_id
+        .with((path.surface, "surface"))
+        .with(("tab-header", tab_id))
 }
 
 #[cfg(test)]
@@ -42,7 +44,10 @@ mod tab_identity_tests {
         let first = NodePath::new(surface, crate::NodeIndex(1));
         let second = NodePath::new(surface, crate::NodeIndex(2));
         let logical = Id::new("original-tab");
-        assert_eq!(tab_widget_id(area, first, logical), tab_widget_id(area, second, logical));
+        assert_eq!(
+            tab_widget_id(area, first, logical),
+            tab_widget_id(area, second, logical),
+        );
         assert_ne!(
             tab_widget_id(area, first, logical),
             tab_widget_id(area, first, Id::new("replacement-tab")),
@@ -55,7 +60,10 @@ mod tab_identity_tests {
         let root = NodePath::new(SurfaceIndex::main(), crate::NodeIndex::root());
         let other = NodePath::new(SurfaceIndex(1), crate::NodeIndex::root());
         let logical = Id::new("tab");
-        assert_ne!(tab_widget_id(area, root, logical), tab_widget_id(area, other, logical));
+        assert_ne!(
+            tab_widget_id(area, root, logical),
+            tab_widget_id(area, other, logical),
+        );
         assert_ne!(
             tab_widget_id(area, root, logical),
             tab_widget_id(Id::new("another-area"), root, logical),

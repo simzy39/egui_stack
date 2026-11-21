@@ -4,7 +4,7 @@
 use egui::{Id, Key, Pos2, Rect, Ui};
 
 use super::super::{
-    drag_and_drop::{DragSource, DragData, TreeComponent, make_overlay_painter},
+    drag_and_drop::{DragData, DragSource, TreeComponent, make_overlay_painter},
     session::{DragSession, Outcome, RELEASED_PASSES, Report},
     state::State,
     PendingFloat,
@@ -46,12 +46,15 @@ impl<Tab> DockArea<'_, Tab> {
             .as_ref()
             .and_then(|space| space.floating.session.as_ref())
             .map(|session| session.payload);
-        if let Some(invalid_source) =
-            session_source.filter(|source| !self.drag_source_valid(*source, tab_viewer))
+        if let Some(invalid_source) = session_source
+            .filter(|source| !self.drag_source_valid(*source, tab_viewer))
         {
             // The invalid session may already have populated this viewport's preview.
             // Do not let that stale preview recreate the cancelled session below.
-            if drag_data.as_ref().is_some_and(|drag| drag.source == invalid_source) {
+            if drag_data
+                .as_ref()
+                .is_some_and(|drag| drag.source == invalid_source)
+            {
                 *drag_data = None;
             }
             if let Some(space) = self.space.as_mut() {
@@ -219,11 +222,7 @@ impl<Tab> DockArea<'_, Tab> {
             }
             return Across::Done;
         };
-        let (source, rect, take) = (
-            session.payload,
-            session.rect,
-            session.released.is_some(),
-        );
+        let (source, rect, take) = (session.payload, session.rect, session.released.is_some());
         state.remote = true;
         state.last_hover_pos = Some(pointer);
         state.drag_start.get_or_insert(pointer);
@@ -384,7 +383,11 @@ impl<Tab> DockArea<'_, Tab> {
                 .refusal_of(&src, tab_viewer, &destination, true)
                 .is_none()
         {
-            self.to_float.push(PendingFloat { source, rect, host: Some(host) });
+            self.to_float.push(PendingFloat {
+                source,
+                rect,
+                host: Some(host),
+            });
         }
     }
 
@@ -687,7 +690,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn retained_tab_identity_rejects_replacement_at_same_position() {
         let mut dock = DockState::new(vec!["first", "second"]);
@@ -731,7 +733,6 @@ mod tests {
         area.dock_state.leaf_mut(root).unwrap().tabs.clear();
         assert!(!area.drag_source_valid(DragSource::Group(root), &mut viewer));
     }
-
 
     #[test]
     fn movement_rechecks_tab_identity_before_mutating_the_tree() {

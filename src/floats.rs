@@ -1724,6 +1724,42 @@ mod viewport_lifecycle_tests {
     }
 
     #[test]
+    fn forgetting_native_float_clears_its_viewport_and_source_drag() {
+        let source = ViewportId::from_hash_of("native-float");
+        let mut space = DockSpace::<&'static str>::new();
+        space.floating.viewports.insert("float-1".to_owned(), source);
+        space.floating.session = Some(session(source));
+        space.floating.chrome.insert("float-1".to_owned(), 24.0);
+        space.floating.moving.insert("float-1".to_owned());
+        forget_native(&mut space, "float-1");
+        assert!(space.floating.viewports.is_empty());
+        assert!(space.floating.session.is_none());
+        assert!(space.floating.chrome.is_empty());
+        assert!(space.floating.moving.is_empty());
+    }
+
+    #[test]
+    fn forgetting_native_float_cancels_its_remote_drop_report() {
+        let source = ViewportId::from_hash_of("source");
+        let target = ViewportId::from_hash_of("native-float");
+        let mut space = DockSpace::<&'static str>::new();
+        space.floating.viewports.insert("float-1".to_owned(), target);
+        let mut active = session(source);
+        active.pass = 3;
+        active.reports.insert(target, Report {
+            stamp: 3,
+            rank: 1,
+            outcome: Outcome::Refused,
+            unfold: None,
+        });
+        space.floating.session = Some(active);
+        forget_native(&mut space, "float-1");
+        let active = space.floating.session.as_ref().unwrap();
+        assert!(active.cancelled);
+        assert!(active.reports.is_empty());
+    }
+
+    #[test]
     fn closing_source_viewport_ends_drag_session() {
         let source = ViewportId::from_hash_of("source");
         let mut floating = Floating::default();

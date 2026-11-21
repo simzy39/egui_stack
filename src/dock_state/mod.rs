@@ -1082,6 +1082,7 @@ mod test {
         let mut dock = DockState::new(vec!["first", "second"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
         let before = dock.surfaces.len();
+        let focus = dock.focused_leaf();
         assert!(!dock.remove_leaf(NodePath::new(
             SurfaceIndex::main(),
             NodeIndex(999),
@@ -1091,9 +1092,28 @@ mod test {
             NodeIndex::root(),
         )));
         assert_eq!(dock.surfaces.len(), before);
+        assert_eq!(dock.focused_leaf(), focus);
         assert_eq!(dock.leaf(root).unwrap().tabs, ["first", "second"]);
         assert!(dock.remove_leaf(root));
         assert!(dock.get_surface(SurfaceIndex::main()).is_some());
+    }
+
+    #[test]
+    fn removing_non_leaf_is_rejected_and_removing_last_window_leaf_closes_surface() {
+        let mut dock = DockState::new(vec!["first"]);
+        dock.main_surface_mut()
+            .split_right(NodeIndex::root(), 0.5, vec!["second"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        assert!(!dock.remove_leaf(root));
+        assert!(dock.find_tab(&"first").is_some());
+        assert!(dock.find_tab(&"second").is_some());
+
+        let window = dock.add_window(vec!["floating"]);
+        let floating = NodePath::new(window, NodeIndex::root());
+        assert!(dock.remove_leaf(floating));
+        assert!(dock.get_surface(window).is_none_or(Surface::is_empty));
+        assert!(dock.find_tab(&"first").is_some());
+        assert!(dock.find_tab(&"second").is_some());
     }
 
     #[test]

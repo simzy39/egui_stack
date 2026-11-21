@@ -56,7 +56,11 @@ pub struct DockState<Tab> {
 /// A surface and its runtime identity form one owned slot. The identity is
 /// deliberately excluded from persistence and reset on cloning.
 #[derive(Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Deserialize, serde::Serialize),
+    serde(transparent)
+)]
 struct SurfaceSlot<Tab> {
     surface: Surface<Tab>,
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -1386,6 +1390,36 @@ mod test {
         assert_ne!(cloned.capture_surface_identity(extra), Some(extra_id));
         assert_eq!(original.current_surface_identity(SurfaceIndex::main()), Some(main_id));
         assert_eq!(original.current_surface_identity(extra), Some(extra_id));
+    }
+
+    #[test]
+    fn indexed_tree_mutation_invalidates_only_its_surface_slot() {
+        let mut dock = DockState::new(vec!["main"]);
+        let extra = dock.add_window(vec!["other"]);
+        let main = SurfaceIndex::main();
+        let main_identity = dock.capture_surface_identity(main).unwrap();
+        let extra_identity = dock.capture_surface_identity(extra).unwrap();
+
+        dock[main].push_to_first_leaf("new");
+
+        assert_eq!(dock.current_surface_identity(main), None);
+        assert_eq!(dock.current_surface_identity(extra), Some(extra_identity));
+        assert_ne!(dock.capture_surface_identity(main), Some(main_identity));
+    }
+
+    #[test]
+    fn indexed_node_mutation_invalidates_only_its_surface_slot() {
+        let mut dock = DockState::new(vec!["main"]);
+        let extra = dock.add_window(vec!["other"]);
+        let main = SurfaceIndex::main();
+        let main_identity = dock.capture_surface_identity(main).unwrap();
+        let extra_identity = dock.capture_surface_identity(extra).unwrap();
+
+        dock[NodePath::new(main, NodeIndex::root())].append_tab("new");
+
+        assert_eq!(dock.current_surface_identity(main), None);
+        assert_eq!(dock.current_surface_identity(extra), Some(extra_identity));
+        assert_ne!(dock.capture_surface_identity(main), Some(main_identity));
     }
 
     #[test]

@@ -1503,6 +1503,24 @@ mod detach_tests {
     }
 
     #[test]
+    fn restore_uses_surviving_neighbour_before_stale_index() {
+        let mut space = DockSpace::new();
+        space.add_dock("editor", DockRules::default(), vec!["first", "middle", "last"]);
+        let (tab, place) = space.take_with_place(Id::new("middle"), id).unwrap();
+        assert_eq!(tab, "middle");
+
+        // The saved index is no longer a reliable position after the first
+        // neighbour disappears. The surviving neighbour remains authoritative.
+        let first = space.dock("editor").unwrap().find_tab(&"first").unwrap();
+        let surface = space.dock_surface("editor").unwrap();
+        space.state.remove_tab(TabPath::new(surface, first.node, first.tab)).unwrap();
+        assert_eq!(space.restore_at(tab, place, id).unwrap(), "editor");
+        let tree = space.dock("editor").unwrap();
+        let root = tree.leaf(NodeIndex::root()).unwrap();
+        assert_eq!(root.tabs, ["middle", "last"]);
+    }
+
+    #[test]
     fn restore_skips_registered_docks_with_missing_surfaces() {
         let mut space = DockSpace::new();
         let original = space.add_dock("original", DockRules::default(), vec!["first"]);

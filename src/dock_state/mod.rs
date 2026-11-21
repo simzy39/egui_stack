@@ -1076,6 +1076,39 @@ mod test {
     }
 
     #[test]
+    fn same_leaf_no_op_moves_preserve_order_and_active_tab() {
+        let mut dock = DockState::new(vec!["a", "b", "c"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        dock.leaf_mut(root).unwrap().active = TabIndex(1);
+        for (from, insertion) in [
+            (0, TabInsert::Insert(TabIndex(0))),
+            (0, TabInsert::Insert(TabIndex(1))),
+            (1, TabInsert::Insert(TabIndex(1))),
+            (1, TabInsert::Insert(TabIndex(2))),
+            (2, TabInsert::Append),
+        ] {
+            assert!(!dock.move_tab(
+                TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(from)),
+                TabDestination::Node(root, insertion),
+            ));
+            let leaf = dock.leaf(root).unwrap();
+            assert_eq!(leaf.tabs, ["a", "b", "c"]);
+            assert_eq!(leaf.active, TabIndex(1));
+        }
+    }
+
+    #[test]
+    fn same_leaf_reorder_changes_tab_order() {
+        let mut dock = DockState::new(vec!["a", "b", "c"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        assert!(dock.move_tab(
+            TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(0)),
+            TabDestination::Node(root, TabInsert::Append),
+        ));
+        assert_eq!(dock.leaf(root).unwrap().tabs, ["b", "c", "a"]);
+    }
+
+    #[test]
     fn retain_none_then_push() {
         let mut t = DockState::new(vec![]);
         t.push_to_focused_leaf(0);

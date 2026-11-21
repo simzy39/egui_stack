@@ -2,7 +2,7 @@
 
 use egui::{Id, Rect, ViewportId};
 
-use crate::floats::{FloatEvent, Floating, PendingFloat};
+use crate::floats::{FloatEvent, Floating, PendingFloat, WindowMove};
 use crate::layout::{
     Content, Drops, Fold, Laid, LaidZone, Layout, Restore, Shown, Zone, ZoneKind, ZoneName,
 };
@@ -1146,7 +1146,8 @@ impl<Tab> DockSpace<Tab> {
     ///
     /// Transfers float configuration and unconsumed events. Pending opens and window metadata
     /// are retained only for floating docks that still exist in the replacement space.
-    /// A drag session is retained only when its source still matches the replacement state;\n    /// old target reports and deferred releases are discarded until the new layout is drawn.
+    /// A drag session is retained only when its source still matches the replacement state;
+    /// old target reports and deferred releases are discarded until the new layout is drawn.
     /// Existing origin records in the replacement take precedence over transferred records.
     ///
     /// The replacement layout is authoritative: this method does not recreate removed docks
@@ -1192,6 +1193,23 @@ impl<Tab> DockSpace<Tab> {
         floating.collapsed.retain(|name| live_float(name));
         floating.close_asked.retain(|name| live_float(name));
         floating.released_at.retain(|name, _| live_float(name));
+        floating.grabs.retain(|name, _| live_float(name));
+        if floating
+            .window_move
+            .as_ref()
+            .is_some_and(|moving| !live_float(&moving.key))
+        {
+            floating.window_move = None;
+        }
+        // A window's previous hover target and the rectangles/layers of the old
+        // layout are geometry from a different frame tree. Keep the gesture's
+        // pointer anchor for a surviving float, but require fresh hit testing.
+        if let Some(moving) = floating.window_move.as_mut() {
+            moving.target = None;
+        }
+        floating.rects.clear();
+        floating.layers.clear();
+        floating.zones = crate::floats::BoundZones::default();
         // The new layout may already contain floats with higher identifiers
         // than the previous runtime counter. Never allocate a previously used
         // float name after rebuilding the space.
@@ -1603,6 +1621,35 @@ mod detach_tests {
         replacement.carry_floats_from(&mut old);
         assert!(replacement.floating.pending.is_empty());
         assert!(old.floating.pending.is_empty());
+    }
+
+    #[test]
+    fn carrying_float_runtime_state_prunes_orphaned_gestures() {
+        let mut old = DockSpace::<&'static str>::new();
+        old.add_dock("float-1", DockRules::default(), vec!["survives"]);
+        old.add_dock("float-2", DockRules::default(), vec!["removed"]);
+        for name in ["float-1", "float-2"] {
+            let index = old.dock_index(name).unwrap();
+            old.docks[index].floating = true;
+        }
+        old.floating.window_move = Some(WindowMove::new("float-2"));
+        old.floating.grabs.insert("float-1".to_owned(), egui::Vec2::splat(4.0));
+        old.floating.grabs.insert("float-2".to_owned(), egui::Vec2::splat(8.0));
+
+        let mut replacement = DockSpace::<&'static str>::new();
+        replacement.add_dock("float-1", DockRules::default(), vec!["survives"]);
+        let index = replacement.dock_index("float-1").unwrap();
+        replacement.docks[index].floating = true;
+
+        replacement.carry_floats_from(&mut old);
+
+        assert!(replacement.floating.window_move.is_none());
+        assert_eq!(replacement.floating.grabs.len(), 1);
+        assert_eq!(
+            replacement.floating.grabs.get("float-1"),
+            Some(&egui::Vec2::splat(4.0)),
+        );
+        assert!(!replacement.floating.grabs.contains_key("float-2"));
     }
 
     #[test]

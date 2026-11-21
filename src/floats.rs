@@ -964,6 +964,7 @@ fn forget_native<Tab>(space: &mut DockSpace<Tab>, key: &str) {
     space.floating.builders.remove(key);
     space.floating.moving.remove(key);
     space.floating.placed.remove(key);
+    space.floating.grabs.remove(key);
     if space
         .floating
         .window_move

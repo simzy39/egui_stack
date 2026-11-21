@@ -31,6 +31,38 @@ fn tab_widget_id(dock_area_id: Id, path: NodePath, tab_id: Id) -> Id {
     dock_area_id.with((path.surface, "surface")).with(("tab-header", tab_id))
 }
 
+#[cfg(test)]
+mod tab_identity_tests {
+    use super::*;
+
+    #[test]
+    fn header_identity_survives_reordering_and_leaf_moves_on_one_surface() {
+        let area = Id::new("area");
+        let surface = SurfaceIndex::main();
+        let first = NodePath::new(surface, crate::NodeIndex(1));
+        let second = NodePath::new(surface, crate::NodeIndex(2));
+        let logical = Id::new("original-tab");
+        assert_eq!(tab_widget_id(area, first, logical), tab_widget_id(area, second, logical));
+        assert_ne!(
+            tab_widget_id(area, first, logical),
+            tab_widget_id(area, first, Id::new("replacement-tab")),
+        );
+    }
+
+    #[test]
+    fn header_identity_is_scoped_to_surface_and_dock_area() {
+        let area = Id::new("area");
+        let root = NodePath::new(SurfaceIndex::main(), crate::NodeIndex::root());
+        let other = NodePath::new(SurfaceIndex(1), crate::NodeIndex::root());
+        let logical = Id::new("tab");
+        assert_ne!(tab_widget_id(area, root, logical), tab_widget_id(area, other, logical));
+        assert_ne!(
+            tab_widget_id(area, root, logical),
+            tab_widget_id(Id::new("another-area"), root, logical),
+        );
+    }
+}
+
 /// The height every button of a tab bar leaves free at the bottom of the bar: the line under
 /// the bar stays visible under it, at rest and hovered.
 const BAR_LINE: f32 = 2.0;

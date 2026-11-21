@@ -114,7 +114,7 @@ impl DragSession {
             .iter()
             .filter(|(viewport, report)| {
                 **viewport != self.source
-                    && report.stamp + 1 >= self.pass
+                    && report.stamp.saturating_add(1) >= self.pass
                     && (self.outside || (source_rank == 0 && report.rank > 0))
             })
             .map(|(_, report)| report)
@@ -130,7 +130,7 @@ impl DragSession {
         let over = self
             .reports
             .iter()
-            .filter(|(_, report)| report.stamp + 1 >= self.pass)
+            .filter(|(_, report)| report.stamp.saturating_add(1) >= self.pass)
             .max_by_key(|(_, report)| report.rank)
             .map(|(viewport, _)| *viewport)
             .filter(|_| self.outside || self.remote(0).is_some());
@@ -170,4 +170,54 @@ pub struct SpaceDrag {
     pub released: bool,
     /// Cancelled (Escape, or the window under the pointer closed): nothing moves at release.
     pub cancelled: bool,
+}
+
+#[cfg(test)]
+mod recency_tests {
+    use super::*;
+    use crate::{NodeIndex, SurfaceIndex, TabIndex};
+    use egui::Id;
+
+    fn session() -> DragSession {
+        DragSession::new(
+            DragSource::Tab {
+                path: TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(0)),
+                id: Id::new("tab"),
+            },
+            Rect::NOTHING,
+            ViewportId::from_hash_of("source"),
+            Pos2::ZERO,
+        )
+    }
+
+    #[test]
+    fn maximum_pass_does_not_overflow_when_selecting_remote_report() {
+        let mut drag = session();
+        drag.pass = u64::MAX;
+        drag.outside = true;
+        let remote = ViewportId::from_hash_of("remote");
+        drag.reports.insert(remote, Report {
+            stamp: u64::MAX,
+            rank: 1,
+            outcome: Outcome::Refused,
+            unfold: None,
+        });
+        assert!(drag.remote(0).is_some());
+        assert_eq!(drag.dragged().unwrap().over, Some(remote));
+    }
+
+    #[test]
+    fn old_reports_are_ignored() {
+        let mut drag = session();
+        drag.pass = 10;
+        drag.outside = true;
+        drag.reports.insert(ViewportId::from_hash_of("old"), Report {
+            stamp: 2,
+            rank: 1,
+            outcome: Outcome::Refused,
+            unfold: None,
+        });
+        assert!(drag.remote(0).is_none());
+        assert!(drag.dragged().unwrap().over.is_none());
+    }
 }

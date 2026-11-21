@@ -193,7 +193,10 @@ impl<Tab> DockArea<'_, Tab> {
             ui.data_mut(|d| {
                 let request = d.get_temp::<(u64, Option<DragSource>, Id)>(press_request);
                 if request.is_some_and(|(pass, source, _)| {
-                    pass == ui.ctx().cumulative_pass_nr() && source.is_some_and(|source| source.component() == TreeComponent::Node(path))
+                    pass == ui.ctx().cumulative_pass_nr()
+                        && source.is_some_and(|source| {
+                            source.component() == TreeComponent::Node(path)
+                        })
                 }) {
                     d.remove_temp::<(u64, Option<DragSource>, Id)>(press_request)
                 } else {
@@ -225,7 +228,10 @@ impl<Tab> DockArea<'_, Tab> {
             ui.data_mut(|d| {
                 let pending = d.get_temp::<(u64, Option<DragSource>, Id)>(request);
                 if pending.is_some_and(|(pass, source, _)| {
-                    pass == ui.ctx().cumulative_pass_nr() && source.is_some_and(|source| source.component() == TreeComponent::Node(path))
+                    pass == ui.ctx().cumulative_pass_nr()
+                        && source.is_some_and(|source| {
+                            source.component() == TreeComponent::Node(path)
+                        })
                 }) {
                     d.remove_temp::<(u64, Option<DragSource>, Id)>(request)
                 } else {

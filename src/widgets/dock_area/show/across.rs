@@ -985,6 +985,40 @@ mod tests {
     }
 
     #[test]
+    fn positional_insert_report_rejects_reordered_destination_tabs() {
+        let mut dock = DockState::new(vec!["first", "second", "third"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let mut viewer = Viewer { allow_windows: true };
+        let mut area = DockArea::new(&mut dock);
+        let destination = TabDestination::Node(root, TabInsert::Insert(TabIndex(1)));
+        let reported: Vec<_> = area
+            .dock_state
+            .leaf_mut(root)
+            .unwrap()
+            .tabs
+            .iter_mut()
+            .map(|tab| viewer.id(tab))
+            .collect();
+
+        assert!(area.reported_insertion_order_valid(
+            &destination,
+            Some(&reported),
+            &mut viewer,
+        ));
+        area.dock_state.leaf_mut(root).unwrap().tabs.swap(0, 2);
+        assert!(!area.reported_insertion_order_valid(
+            &destination,
+            Some(&reported),
+            &mut viewer,
+        ));
+        assert!(!area.reported_insertion_order_valid(
+            &destination,
+            None,
+            &mut viewer,
+        ));
+    }
+
+    #[test]
     fn remote_release_rejects_destination_insert_index_stale_after_tab_removal() {
         let mut dock = DockState::new(vec!["source"]);
         dock.main_surface_mut()

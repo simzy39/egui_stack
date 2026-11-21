@@ -1552,7 +1552,7 @@ mod detach_tests {
     }
 
     fn id(tab: &mut &'static str) -> Id {
-        Id::new(*tab)
+        Id::unique(*tab)
     }
 
     #[test]
@@ -1571,11 +1571,11 @@ mod detach_tests {
     #[test]
     fn carrying_origins_prefers_replacement_and_deduplicates_transferred_records() {
         let mut old = DockSpace::<&'static str>::new();
-        old.origins.push(TabOrigin::new(Id::new("shared"), "old", None, None));
-        old.origins.push(TabOrigin::new(Id::new("new"), "first", None, None));
-        old.origins.push(TabOrigin::new(Id::new("new"), "duplicate", None, None));
+        old.origins.push(TabOrigin::new(Id::unique("shared"), "old", None, None));
+        old.origins.push(TabOrigin::new(Id::unique("new"), "first", None, None));
+        old.origins.push(TabOrigin::new(Id::unique("new"), "duplicate", None, None));
         let mut replacement = DockSpace::<&'static str>::new();
-        replacement.origins.push(TabOrigin::new(Id::new("shared"), "replacement", None, None));
+        replacement.origins.push(TabOrigin::new(Id::unique("shared"), "replacement", None, None));
 
         replacement.carry_floats_from(&mut old);
 
@@ -1598,7 +1598,7 @@ mod detach_tests {
             dock: "float-1".to_owned(),
             rect: float_rect(),
             physical: None,
-            tabs: vec![Id::new("floating")],
+            tabs: vec![Id::unique("floating")],
             host: FloatHost::InWindow,
         });
         replacement.carry_floats_from(&mut old);
@@ -1614,7 +1614,7 @@ mod detach_tests {
             dock: "float-1".to_owned(),
             rect: float_rect(),
             physical: None,
-            tabs: vec![Id::new("one")],
+            tabs: vec![Id::unique("one")],
             host: FloatHost::InWindow,
         });
         let mut replacement = DockSpace::<&'static str>::new();
@@ -1688,7 +1688,7 @@ mod detach_tests {
         let mut space = DockSpace::new();
         space.add_dock("original", DockRules::default(), vec!["first", "second"]);
         space.add_dock("fallback", DockRules::default(), vec!["existing"]);
-        let (tab, place) = space.take_with_place(Id::new("first"), id).unwrap();
+        let (tab, place) = space.take_with_place(Id::unique("first"), id).unwrap();
         assert_eq!(tab, "first");
         space.remove_dock("original").unwrap();
         assert_eq!(space.restore_at(tab, place, id).unwrap(), "fallback");
@@ -1700,7 +1700,7 @@ mod detach_tests {
         let mut space = DockSpace::new();
         let original = space.add_dock("original", DockRules::default(), vec!["first"]);
         space.add_dock("fallback", DockRules::default(), vec!["existing"]);
-        let (tab, place) = space.take_with_place(Id::new("first"), id).unwrap();
+        let (tab, place) = space.take_with_place(Id::unique("first"), id).unwrap();
         space.state.take_surface(original).unwrap();
         assert_eq!(space.dock_surface("original"), Some(original));
         assert_eq!(space.restore_at(tab, place, id).unwrap(), "fallback");
@@ -1711,7 +1711,7 @@ mod detach_tests {
     fn restore_without_usable_dock_returns_original_tab() {
         let mut space = DockSpace::new();
         let original = space.add_dock("original", DockRules::default(), vec!["first"]);
-        let (tab, place) = space.take_with_place(Id::new("first"), id).unwrap();
+        let (tab, place) = space.take_with_place(Id::unique("first"), id).unwrap();
         space.state.take_surface(original).unwrap();
         assert_eq!(space.restore_at(tab, place, id).unwrap_err(), "first");
         assert_eq!(space.dock_surface("original"), Some(original));
@@ -1721,7 +1721,7 @@ mod detach_tests {
     fn restore_uses_surviving_neighbour_before_stale_index() {
         let mut space = DockSpace::new();
         space.add_dock("editor", DockRules::default(), vec!["first", "middle", "last"]);
-        let (tab, place) = space.take_with_place(Id::new("middle"), id).unwrap();
+        let (tab, place) = space.take_with_place(Id::unique("middle"), id).unwrap();
         assert_eq!(tab, "middle");
 
         // The saved index is no longer a reliable position after the first
@@ -1740,7 +1740,7 @@ mod detach_tests {
         let mut space = DockSpace::new();
         let original = space.add_dock("original", DockRules::default(), vec!["first"]);
         space.add_dock("fallback", DockRules::default(), vec!["existing"]);
-        let (tab, place) = space.take_with_place(Id::new("first"), id).unwrap();
+        let (tab, place) = space.take_with_place(Id::unique("first"), id).unwrap();
 
         // A registered dock can become unusable when its surface was taken
         // independently. Restoration must select a real destination tree.
@@ -1755,7 +1755,7 @@ mod detach_tests {
     fn restore_without_any_dock_returns_tab_to_caller() {
         let mut space = DockSpace::new();
         space.add_dock("original", DockRules::default(), vec!["first"]);
-        let (tab, place) = space.take_with_place(Id::new("first"), id).unwrap();
+        let (tab, place) = space.take_with_place(Id::unique("first"), id).unwrap();
         space.remove_dock("original").unwrap();
         assert_eq!(space.restore_at(tab, place, id), Err("first"));
     }
@@ -1827,7 +1827,7 @@ mod detach_tests {
         assert_eq!(space.state[target][NodeIndex::root()].tabs_count(), 1);
         assert_eq!(space.state[surface][NodeIndex::root()].tabs_count(), 1);
         assert_eq!(space.origins.len(), 1);
-        assert_eq!(space.origins[0].tab, Id::new("one"));
+        assert_eq!(space.origins[0].tab, Id::unique("one"));
         assert_eq!(space.origins[0].dock, "editor");
         assert_eq!(space.floating.pending.len(), 1);
     }
@@ -1871,7 +1871,7 @@ mod detach_tests {
         assert_eq!(space.floating.pending.len(), 2);
         assert_eq!(space.origins.len(), 1);
         assert_eq!(space.origins[0].dock, "editor");
-        assert_eq!(space.origins[0].tab, Id::new("one"));
+        assert_eq!(space.origins[0].tab, Id::unique("one"));
         let target = space.dock_surface(&second).unwrap();
         assert_eq!(space.state[target][NodeIndex::root()].tabs_count(), 1);
     }

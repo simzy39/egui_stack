@@ -1734,7 +1734,7 @@ mod viewport_lifecycle_tests {
     fn session(source: ViewportId) -> DragSession {
         let path = TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(0));
         DragSession::new(
-            DragSource::Tab { path, id: egui::Id::new("tab") },
+            DragSource::Tab { path, id: egui::Id::unique("tab") },
             Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(100.0, 100.0)),
             source,
             egui::Pos2::ZERO,

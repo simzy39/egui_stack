@@ -302,9 +302,9 @@ mod custom_handle_request_tests {
         let ctx = Context::default();
         let left = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
         let source = DragSource::Group { path: left, id: 17 };
-        let handle = Id::new("handle");
-        let area_a = Id::new("area-a");
-        let area_b = Id::new("area-b");
+        let handle = Id::unique("handle");
+        let area_a = Id::unique("area-a");
+        let area_b = Id::unique("area-b");
         let press_a = BodyLeaf::press_id(area_a);
         let drag_a = BodyLeaf::request_id(area_a);
         let press_b = BodyLeaf::press_id(area_b);
@@ -331,10 +331,10 @@ mod custom_handle_request_tests {
     #[test]
     fn invalid_source_does_not_reserve_a_request_slot() {
         let ctx = Context::default();
-        let key = BodyLeaf::press_id(Id::new("dock"));
-        let valid = Id::new("valid");
+        let key = BodyLeaf::press_id(Id::unique("dock"));
+        let valid = Id::unique("valid");
         ctx.data_mut(|data| {
-            BodyLeaf::retain_first_request(data, key, 5, (None, Id::new("invalid")));
+            BodyLeaf::retain_first_request(data, key, 5, (None, Id::unique("invalid")));
             assert_eq!(data.get_temp::<(u64, Option<DragSource>, Id)>(key), None);
             BodyLeaf::retain_first_request(data, key, 5, (Some(source()), valid));
             assert_eq!(
@@ -348,11 +348,11 @@ mod custom_handle_request_tests {
     fn only_the_matching_leaf_can_consume_a_current_pass_request() {
         use crate::{NodeIndex, SurfaceIndex};
         let ctx = Context::default();
-        let key = BodyLeaf::request_id(Id::new("dock"));
+        let key = BodyLeaf::request_id(Id::unique("dock"));
         let left = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
         let right = NodePath::new(SurfaceIndex::main(), NodeIndex(2));
         let source = DragSource::Group { path: left, id: 37 };
-        let handle = Id::new("left-handle");
+        let handle = Id::unique("left-handle");
         ctx.data_mut(|data| {
             BodyLeaf::retain_first_request(data, key, 20, (Some(source), handle));
             assert_eq!(BodyLeaf::take_request_for_leaf(data, key, 20, right), None);
@@ -368,9 +368,9 @@ mod custom_handle_request_tests {
     #[test]
     fn competing_handles_preserve_first_request_within_pass() {
         let ctx = Context::default();
-        let area = Id::new("dock");
-        let first = Id::new("first-handle");
-        let second = Id::new("second-handle");
+        let area = Id::unique("dock");
+        let first = Id::unique("first-handle");
+        let second = Id::unique("second-handle");
         for key in [BodyLeaf::press_id(area), BodyLeaf::request_id(area)] {
             ctx.data_mut(|data| {
                 BodyLeaf::retain_first_request(data, key, 10, (Some(source()), first));
@@ -386,11 +386,11 @@ mod custom_handle_request_tests {
     #[test]
     fn unconsumed_request_does_not_block_a_later_pass() {
         let ctx = Context::default();
-        let first = Id::new("first-handle");
-        let second = Id::new("second-handle");
+        let first = Id::unique("first-handle");
+        let second = Id::unique("second-handle");
         for key in [
-            BodyLeaf::press_id(Id::new("dock")),
-            BodyLeaf::request_id(Id::new("dock")),
+            BodyLeaf::press_id(Id::unique("dock")),
+            BodyLeaf::request_id(Id::unique("dock")),
         ] {
             ctx.data_mut(|data| {
                 BodyLeaf::retain_first_request(data, key, 10, (Some(source()), first));
@@ -408,7 +408,7 @@ mod custom_handle_request_tests {
     fn competing_leaves_cannot_replace_a_pending_request() {
         use crate::{NodeIndex, SurfaceIndex};
         let ctx = Context::default();
-        let key = BodyLeaf::request_id(Id::new("dock"));
+        let key = BodyLeaf::request_id(Id::unique("dock"));
         let first = DragSource::Group {
             path: NodePath::new(SurfaceIndex::main(), NodeIndex(1)),
             id: 41,
@@ -417,8 +417,8 @@ mod custom_handle_request_tests {
             path: NodePath::new(SurfaceIndex::main(), NodeIndex(2)),
             id: 42,
         };
-        let first_handle = Id::new("first");
-        let second_handle = Id::new("second");
+        let first_handle = Id::unique("first");
+        let second_handle = Id::unique("second");
         ctx.data_mut(|data| {
             BodyLeaf::retain_first_request(data, key, 10, (Some(first), first_handle));
             BodyLeaf::retain_first_request(data, key, 10, (Some(second), second_handle));
@@ -438,12 +438,12 @@ mod custom_handle_request_tests {
     fn a_replaced_leaf_cannot_take_over_a_pending_handle_request() {
         use crate::{NodeIndex, SurfaceIndex};
         let ctx = Context::default();
-        let key = BodyLeaf::request_id(Id::new("dock"));
+        let key = BodyLeaf::request_id(Id::unique("dock"));
         let path = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
         let original = DragSource::Group { path, id: 41 };
         let replacement = DragSource::Group { path, id: 42 };
-        let old_handle = Id::new("old-handle");
-        let new_handle = Id::new("new-handle");
+        let old_handle = Id::unique("old-handle");
+        let new_handle = Id::unique("new-handle");
 
         ctx.data_mut(|data| {
             BodyLeaf::retain_first_request(data, key, 7, (Some(original), old_handle));
@@ -461,8 +461,8 @@ mod custom_handle_request_tests {
     #[test]
     fn stale_request_is_not_eligible_in_another_pass() {
         let ctx = Context::default();
-        let key = BodyLeaf::press_id(Id::new("dock"));
-        let handle = Id::new("handle");
+        let key = BodyLeaf::press_id(Id::unique("dock"));
+        let handle = Id::unique("handle");
         ctx.data_mut(|data| {
             BodyLeaf::retain_first_request(data, key, 10, (Some(source()), handle));
             let pending = data.get_temp::<(u64, Option<DragSource>, Id)>(key);
@@ -480,11 +480,11 @@ mod custom_handle_request_tests {
     fn rejected_request_does_not_consume_the_owners_pending_request() {
         use crate::{NodeIndex, SurfaceIndex};
         let ctx = Context::default();
-        let key = BodyLeaf::press_id(Id::new("dock"));
+        let key = BodyLeaf::press_id(Id::unique("dock"));
         let owner = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
         let other = NodePath::new(SurfaceIndex::main(), NodeIndex(2));
         let source = DragSource::Group { path: owner, id: 123 };
-        let widget = Id::new("owner-handle");
+        let widget = Id::unique("owner-handle");
 
         ctx.data_mut(|data| {
             BodyLeaf::retain_first_request(data, key, 10, (Some(source), widget));
@@ -501,9 +501,9 @@ mod custom_handle_request_tests {
     #[test]
     fn consumed_request_allows_next_handle_in_same_pass() {
         let ctx = Context::default();
-        let key = BodyLeaf::press_id(Id::new("dock"));
-        let first = Id::new("first-handle");
-        let second = Id::new("second-handle");
+        let key = BodyLeaf::press_id(Id::unique("dock"));
+        let first = Id::unique("first-handle");
+        let second = Id::unique("second-handle");
         ctx.data_mut(|data| {
             BodyLeaf::retain_first_request(data, key, 10, (Some(source()), first));
             assert_eq!(
@@ -672,7 +672,7 @@ impl<'tree, Tab> DockArea<'tree, Tab> {
     /// # struct Viewer;
     /// # impl egui_stack::TabViewer for Viewer {
     /// #     type Tab = String;
-    /// #     fn id(&mut self, tab: &mut String) -> egui::Id { egui::Id::new(tab.as_str()) }
+    /// #     fn id(&mut self, tab: &mut String) -> egui::Id { egui::Id::unique(tab.as_str()) }
     /// #     fn title(&mut self, tab: &mut String) -> egui::WidgetText { tab.as_str().into() }
     /// #     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut String) { ui.label(tab.as_str()); }
     /// # }
@@ -712,7 +712,7 @@ impl<'tree, Tab> DockArea<'tree, Tab> {
     /// # struct Viewer;
     /// # impl egui_stack::TabViewer for Viewer {
     /// #     type Tab = String;
-    /// #     fn id(&mut self, tab: &mut String) -> egui::Id { egui::Id::new(tab.as_str()) }
+    /// #     fn id(&mut self, tab: &mut String) -> egui::Id { egui::Id::unique(tab.as_str()) }
     /// #     fn title(&mut self, tab: &mut String) -> egui::WidgetText { tab.as_str().into() }
     /// #     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut String) { ui.label(tab.as_str()); }
     /// # }

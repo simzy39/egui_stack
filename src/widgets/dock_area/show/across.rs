@@ -1715,8 +1715,8 @@ mod tests {
         let DragSource::Group { id, .. } = source else {
             panic!("expected a group source");
         };
-        let original = Id::new("original_handle");
-        let competing = Id::new("competing_handle");
+        let original = Id::unique("original_handle");
+        let competing = Id::unique("competing_handle");
         let press = GroupPress { widget: original, source };
         assert!(press.matches(original, root, id));
         assert!(!press.matches(competing, root, id));
@@ -1733,7 +1733,7 @@ mod tests {
         let mut dock = DockState::new(vec!["original"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
         let mut viewer = Viewer { allow_windows: true };
-        let area_id = Id::new("rendered_drag_test");
+        let area_id = Id::unique("rendered_drag_test");
         let original = {
             let mut area = DockArea::new(&mut dock);
             area.group_drag_source(root).unwrap()
@@ -1774,7 +1774,7 @@ mod tests {
         // the rendered UI must actually cancel a stale retained source.
         let mut held = State::load(&ctx, area_id);
         held.group_press = Some(super::super::super::state::GroupPress {
-            widget: Id::new("original_grip"),
+            widget: Id::unique("original_grip"),
             source: original,
         });
         held.drag_start = Some(point);

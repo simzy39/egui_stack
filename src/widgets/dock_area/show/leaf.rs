@@ -39,34 +39,34 @@ mod tab_identity_tests {
 
     #[test]
     fn header_identity_survives_reordering_and_leaf_moves_on_one_surface() {
-        let area = Id::new("area");
+        let area = Id::unique("area");
         let surface = SurfaceIndex::main();
         let first = NodePath::new(surface, crate::NodeIndex(1));
         let second = NodePath::new(surface, crate::NodeIndex(2));
-        let logical = Id::new("original-tab");
+        let logical = Id::unique("original-tab");
         assert_eq!(
             tab_widget_id(area, first, logical),
             tab_widget_id(area, second, logical),
         );
         assert_ne!(
             tab_widget_id(area, first, logical),
-            tab_widget_id(area, first, Id::new("replacement-tab")),
+            tab_widget_id(area, first, Id::unique("replacement-tab")),
         );
     }
 
     #[test]
     fn header_identity_is_scoped_to_surface_and_dock_area() {
-        let area = Id::new("area");
+        let area = Id::unique("area");
         let root = NodePath::new(SurfaceIndex::main(), crate::NodeIndex::root());
         let other = NodePath::new(SurfaceIndex(1), crate::NodeIndex::root());
-        let logical = Id::new("tab");
+        let logical = Id::unique("tab");
         assert_ne!(
             tab_widget_id(area, root, logical),
             tab_widget_id(area, other, logical),
         );
         assert_ne!(
             tab_widget_id(area, root, logical),
-            tab_widget_id(Id::new("another-area"), root, logical),
+            tab_widget_id(Id::unique("another-area"), root, logical),
         );
     }
 }

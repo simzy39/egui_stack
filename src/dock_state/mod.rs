@@ -1044,6 +1044,21 @@ mod test {
     use super::*;
 
     #[test]
+    fn splitting_source_root_preserves_every_tab() {
+        let mut dock = DockState::new(vec!["first", "second", "third"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        assert!(dock.move_tab(
+            TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(1)),
+            TabDestination::Node(root, TabInsert::Split(crate::Split::Right)),
+        ));
+        for name in ["first", "second", "third"] {
+            assert!(dock.find_tab(&name).is_some(), "lost tab: {name}");
+        }
+        let moved = dock.find_tab(&"second").unwrap();
+        assert_eq!(dock.leaf(moved.node_path()).unwrap().tabs, ["second"]);
+    }
+
+    #[test]
     fn rejected_moves_preserve_active_tab_and_focus() {
         let mut dock = DockState::new(vec!["first", "second", "third"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());

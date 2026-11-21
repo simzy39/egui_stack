@@ -224,9 +224,7 @@ impl<Tab> DockArea<'_, Tab> {
         // A press can survive the drag threshold or a layout change. Validate it before
         // resolving any cached data, and suppress the old widget until the button is up.
         if let Some(DragSource::Group { path, id }) = state.group_press
-            && !self.dock_state.leaf(path).is_ok_and(|leaf| {
-                id != 0 && leaf.drag_identity == id && !leaf.tabs.is_empty()
-            })
+            && !self.group_source_valid(path, id)
         {
             self.cancel_tab_drag(ui, state);
         }

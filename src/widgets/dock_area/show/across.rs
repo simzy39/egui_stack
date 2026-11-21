@@ -406,6 +406,13 @@ impl<Tab> DockArea<'_, Tab> {
         Some(tab_viewer.id(tab))
     }
 
+    /// Check a group against the exact leaf retained when the gesture began.
+    pub(super) fn group_source_valid(&self, path: NodePath, id: u64) -> bool {
+        id != 0 && self.dock_state.leaf(path).is_ok_and(|leaf| {
+            !leaf.tabs.is_empty() && leaf.drag_identity == id
+        })
+    }
+
     /// A retained drag must still refer to its original tab, not just a valid slot.
     pub(super) fn drag_source_valid(
         &mut self,
@@ -414,9 +421,7 @@ impl<Tab> DockArea<'_, Tab> {
     ) -> bool {
         match source {
             DragSource::Tab { path, id } => self.tab_identity(path, tab_viewer) == Some(id),
-            DragSource::Group { path, id } => id != 0 && self.dock_state.leaf(path).is_ok_and(|leaf| {
-                !leaf.tabs.is_empty() && leaf.drag_identity == id
-            }),
+            DragSource::Group { path, id } => self.group_source_valid(path, id),
         }
     }
 
@@ -750,6 +755,21 @@ mod tests {
         area.dock_state.main_surface_mut().remove_leaf(NodeIndex::root());
         *area.dock_state.main_surface_mut() = crate::Tree::new(vec!["replacement"]);
         assert!(!area.drag_source_valid(source, &mut viewer));
+    }
+
+    #[test]
+    fn group_identity_rejects_a_leaf_relocated_to_another_path() {
+        let mut dock = DockState::new(vec!["original"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let mut viewer = Viewer { allow_windows: true };
+        let mut area = DockArea::new(&mut dock);
+        let id = area.dock_state.leaf_mut(root).unwrap().ensure_drag_identity();
+        let source = DragSource::Group { path: root, id };
+        area.dock_state.main_surface_mut()
+            .split_right(NodeIndex::root(), 0.5, vec!["new"]);
+        assert!(!area.drag_source_valid(source, &mut viewer));
+        let relocated = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
+        assert!(area.group_source_valid(relocated, id));
     }
 
     #[test]

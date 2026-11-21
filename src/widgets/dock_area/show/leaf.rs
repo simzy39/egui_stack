@@ -865,23 +865,18 @@ impl<Tab> DockArea<'_, Tab> {
                 (response, title_id)
             };
 
-            if self.draggable_tabs
-                && response.is_pointer_button_down_on()
-                && self.modifiers_carry_group(tabs_ui)
-            {
-                self.remember_group_press(tabs_ui, state, path);
-            }
-            if self.draggable_tabs
-                && state.drag_carries_group != Some(true)
-                && (response.is_pointer_button_down_on() || is_being_dragged)
-            {
-                self.remember_tab_press(tabs_ui, state, id, (path, tab_index).into(), tab_viewer);
+            if self.draggable_tabs && response.is_pointer_button_down_on() {
+                let carries_group = *state.drag_carries_group
+                    .get_or_insert_with(|| self.modifiers_carry_group(tabs_ui));
+                if carries_group {
+                    self.remember_group_press(tabs_ui, state, path);
+                } else {
+                    self.remember_tab_press(tabs_ui, state, id, (path, tab_index).into(), tab_viewer);
+                }
             }
 
             if is_being_dragged {
-                let carries_group = *state
-                    .drag_carries_group
-                    .get_or_insert_with(|| self.modifiers_carry_group(tabs_ui));
+                let carries_group = state.drag_carries_group.unwrap_or(false);
                 if carries_group {
                     state.tab_press = None;
                     self.try_initiate_node_drag(tabs_ui, state, path);
@@ -1892,10 +1887,7 @@ impl<Tab> DockArea<'_, Tab> {
             let Some(DragSource::Group { path: original, id }) = state.group_press else {
                 return;
             };
-            if original != path
-                || !self.dock_state.leaf(path).is_ok_and(|leaf| {
-                    id != 0 && leaf.drag_identity == id && !leaf.tabs.is_empty()
-                })
+            if original != path || !self.group_source_valid(path, id)
             {
                 state.tab_drag_cancelled = true;
                 return;

@@ -214,7 +214,7 @@ impl<Tab> DockArea<'_, Tab> {
         // A press can survive the drag threshold or a layout change. Validate it before
         // resolving any cached data, and suppress the old widget until the button is up.
         if let Some(press) = state.tab_press
-            && state.drag_carries_group != Some(true)
+            && !state.drag_carries_group.unwrap_or_else(|| self.modifiers_carry_group(ui))
             && self.tab_identity(press.path, tab_viewer) != Some(press.tab_id)
         {
             self.cancel_tab_drag(ui, state);
@@ -495,6 +495,9 @@ impl<Tab> DockArea<'_, Tab> {
         state.reset_drag();
         state.dragged = None;
         state.tab_in_air = None;
+        ui.memory_mut(|mem| {
+            mem.data.remove_temp::<Option<DragData>>(self.id.with("drag_data"));
+        });
         ui.ctx().stop_dragging();
     }
 

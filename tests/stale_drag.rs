@@ -192,3 +192,27 @@ fn reordering_tabs_cancels_drag_and_allows_a_new_drag() {
     harness.run_steps(5);
     assert_eq!(harness.state().leaf(left).unwrap().tabs(), ["Second"]);
 }
+
+#[test]
+#[cfg_attr(miri, ignore = "drives a whole UI; too slow under Miri")]
+fn replacement_before_drag_activation_does_not_inherit_the_press() {
+    let mut harness = harness();
+    harness.run();
+    let start = harness.get_by_role_and_label(Role::Tab, "First").rect().center();
+    let target = harness.state().main_surface()[NodeIndex(2)].rect().unwrap().center();
+    harness.hover_at(start);
+    harness.step();
+    harness.drag_at(start);
+    harness.step();
+    let left = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
+    harness.state_mut().leaf_mut(left).unwrap().tabs_mut()[0] = "Replacement".to_owned();
+    for step in 1..=5 {
+        harness.hover_at(start + vec2(0.0, 10.0 * step as f32));
+        harness.step();
+    }
+    harness.hover_at(target);
+    harness.step();
+    harness.drop_at(target);
+    harness.run_steps(5);
+    assert_eq!(harness.state().leaf(left).unwrap().tabs(), ["Replacement", "Second"]);
+}

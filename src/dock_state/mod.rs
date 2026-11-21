@@ -356,16 +356,16 @@ impl<Tab> DockState<Tab> {
     /// assert_eq!(leaf.tabs, ["a", "b", "c", "d", "e"]);
     /// assert_eq!(leaf.active, TabIndex(3));
     /// ```
-    pub fn move_node(&mut self, src: NodePath, dst: impl Into<TabDestination>) {
+    pub fn move_node(&mut self, src: NodePath, dst: impl Into<TabDestination>) -> bool {
         let dst = dst.into();
         if matches!(dst, TabDestination::Node(d, _) if d == src) {
-            return;
+            return false;
         }
         let Ok(leaf) = self.leaf_mut(src) else {
-            return;
+            return false;
         };
         if leaf.tabs.is_empty() {
-            return;
+            return false;
         }
         let active = leaf.active.0.min(leaf.tabs.len() - 1);
         let tabs = std::mem::take(&mut leaf.tabs);
@@ -398,7 +398,7 @@ impl<Tab> DockState<Tab> {
                         if let Ok(leaf) = self.leaf_mut(src) {
                             leaf.tabs = tabs;
                         }
-                        return;
+                        return false;
                     };
                     let at = match insert {
                         TabInsert::Insert(i) => i.0.min(leaf.tabs.len()),
@@ -423,20 +423,21 @@ impl<Tab> DockState<Tab> {
         if self[src.surface].is_empty() && self.is_window(src.surface) {
             self.remove_surface(src.surface);
         }
+        true
     }
 
     /// Moves a tab from a node to another node.
     /// You need to specify with [`TabDestination`] how the tab should be moved.
-    pub fn move_tab(&mut self, src: TabPath, dst_tab: impl Into<TabDestination>) {
+    pub fn move_tab(&mut self, src: TabPath, dst_tab: impl Into<TabDestination>) -> bool {
         match dst_tab.into() {
             TabDestination::Window(position) => {
                 self.detach_tab(src, position);
-                return;
+                return true;
             }
             TabDestination::Node(dst, dst_tab) => {
                 // Moving a single tab inside its own node is a no-op
                 if src.node_path() == dst && self[src.node_path()].tabs_count() == 1 {
-                    return;
+                    return false;
                 }
 
                 // Call `Node::remove_tab` to avoid auto remove of the node by `Tree::remove_tab` from Tree.
@@ -467,6 +468,7 @@ impl<Tab> DockState<Tab> {
         if self[src.surface].is_empty() && self.is_window(src.surface) {
             self.remove_surface(src.surface);
         }
+        true
     }
 
     /// Closes the tab at `path` as the dock's close buttons do: asks

@@ -1042,6 +1042,39 @@ mod test {
     use super::*;
 
     #[test]
+    fn rejected_moves_preserve_active_tab_and_focus() {
+        let mut dock = DockState::new(vec!["first", "second", "third"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let source = TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(1));
+        dock.set_active_tab(source).unwrap();
+        dock.set_focused_node_and_surface(root);
+        let before = dock.focused_leaf();
+
+        // Both same-leaf insertion slots are no-ops for the source tab.
+        for index in [1, 2] {
+            assert!(!dock.move_tab(
+                source,
+                TabDestination::Node(root, TabInsert::Insert(TabIndex(index))),
+            ));
+            assert_eq!(dock.leaf(root).unwrap().tabs, ["first", "second", "third"]);
+            assert_eq!(dock.leaf(root).unwrap().active, TabIndex(1));
+            assert_eq!(dock.focused_leaf(), before);
+        }
+
+        // A rejected group move cannot consume its tabs or selection.
+        assert!(!dock.move_node(
+            root,
+            TabDestination::Node(
+                NodePath::new(SurfaceIndex::main(), NodeIndex(999)),
+                TabInsert::Append,
+            ),
+        ));
+        assert_eq!(dock.leaf(root).unwrap().tabs, ["first", "second", "third"]);
+        assert_eq!(dock.leaf(root).unwrap().active, TabIndex(1));
+        assert_eq!(dock.focused_leaf(), before);
+    }
+
+    #[test]
     fn invalid_move_endpoints_do_not_remove_source_tabs() {
         let mut dock = DockState::new(vec!["first", "second"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());

@@ -1066,6 +1066,32 @@ mod test {
     }
 
     #[test]
+    fn invalid_move_sources_do_not_create_windows_or_change_tabs() {
+        let mut dock = DockState::new(vec!["first", "second"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let window = TabDestination::Window(Rect::from_min_size(
+            Pos2::ZERO,
+            Vec2::new(320.0, 240.0),
+        ));
+        for path in [
+            TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(99)),
+            TabPath::new(SurfaceIndex::main(), NodeIndex(999), TabIndex(0)),
+            TabPath::new(SurfaceIndex(999), NodeIndex::root(), TabIndex(0)),
+        ] {
+            assert!(!dock.move_tab(path, window));
+        }
+        for path in [
+            NodePath::new(SurfaceIndex::main(), NodeIndex(999)),
+            NodePath::new(SurfaceIndex(999), NodeIndex::root()),
+        ] {
+            assert!(!dock.move_node(path, window));
+        }
+        assert_eq!(dock.leaf(root).unwrap().tabs, ["first", "second"]);
+        assert!(dock.find_tab(&"first").is_some());
+        assert!(dock.find_tab(&"second").is_some());
+    }
+
+    #[test]
     fn splitting_an_empty_node_is_rejected_without_removing_source() {
         let mut dock = DockState::new(vec!["first", "second"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());

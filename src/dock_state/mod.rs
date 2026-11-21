@@ -491,8 +491,7 @@ impl<Tab> DockState<Tab> {
         }
         match destination {
             TabDestination::Window(position) => {
-                self.detach_tab(src, position);
-                return true;
+                return self.detach_tab(src, position).is_some();
             }
             TabDestination::Node(dst, dst_tab) => {
                 // Call `Node::remove_tab` to avoid auto remove of the node by `Tree::remove_tab` from Tree.
@@ -606,12 +605,12 @@ impl<Tab> DockState<Tab> {
     /// Eject does: the window takes the size of the tab's leaf, or 100 by 150 points if the leaf
     /// has not been shown yet. See [`detach_tab`](Self::detach_tab) to choose the window's rect.
     ///
-    /// Returns the surface index of the new window.
-    ///
-    /// # Panics
-    ///
-    /// Panics if there is no tab at `path`, as [`detach_tab`](Self::detach_tab) does.
-    pub fn eject_tab(&mut self, path: TabPath, position: Pos2) -> SurfaceIndex {
+    /// Returns the new window's surface index, or `None` for an invalid tab path.
+    pub fn eject_tab(&mut self, path: TabPath, position: Pos2) -> Option<SurfaceIndex> {
+        self.leaf(path.node_path())
+            .ok()?
+            .tabs
+            .get(path.tab.0)?;
         let size = self[path.node_path()]
             .rect()
             .map_or(Vec2::new(100., 150.), |rect| rect.size());
@@ -619,10 +618,14 @@ impl<Tab> DockState<Tab> {
     }
 
     /// Takes a tab out of its current surface and puts it in a new window.
-    /// Returns the surface index of the new window.
-    pub fn detach_tab(&mut self, src: TabPath, window_rect: Rect) -> SurfaceIndex {
-        // Remove the tab from the tree and it add to a new window.
-        let tab = self[src.node_path()].remove_tab(src.tab).unwrap();
+    /// Returns the new window's surface index, or `None` if the source tab is invalid.
+    pub fn detach_tab(&mut self, src: TabPath, window_rect: Rect) -> Option<SurfaceIndex> {
+        self.leaf(src.node_path())
+            .ok()?
+            .tabs
+            .get(src.tab.0)?;
+        // Keep the source leaf in place until the destination has received the tab.
+        let tab = self[src.node_path()].remove_tab(src.tab)?;
         let surface_index = self.add_window(vec![tab]);
 
         // Set the window size and position to match `window_rect`.
@@ -637,7 +640,7 @@ impl<Tab> DockState<Tab> {
 
         // Clean up any empty leaves and surfaces which may be left behind from the detachment.
         self.cleanup_moved_source(src.node_path());
-        surface_index
+        Some(surface_index)
     }
 
     /// Returns the currently focused leaf if there is one.
@@ -1063,6 +1066,24 @@ mod test {
             assert_eq!(dock.leaf(root).unwrap().tabs, ["first", "second"]);
             assert_eq!(dock.focused_leaf(), focus);
         }
+    }
+
+    #[test]
+    fn invalid_detach_and_eject_are_noops() {
+        let mut dock = DockState::new(vec!["first", "second"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let before = dock.surfaces.len();
+        let rect = Rect::from_min_size(Pos2::ZERO, Vec2::new(320.0, 240.0));
+        for path in [
+            TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(99)),
+            TabPath::new(SurfaceIndex::main(), NodeIndex(999), TabIndex(0)),
+            TabPath::new(SurfaceIndex(999), NodeIndex::root(), TabIndex(0)),
+        ] {
+            assert_eq!(dock.detach_tab(path, rect), None);
+            assert_eq!(dock.eject_tab(path, Pos2::ZERO), None);
+        }
+        assert_eq!(dock.surfaces.len(), before);
+        assert_eq!(dock.leaf(root).unwrap().tabs, ["first", "second"]);
     }
 
     #[test]

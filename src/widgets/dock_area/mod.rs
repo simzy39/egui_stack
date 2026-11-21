@@ -204,7 +204,7 @@ impl DockArea<'_, ()> {
         if response.is_pointer_button_down_on() && ui.input(|i| i.pointer.primary_pressed()) {
             ui.data_mut(|d| {
                 let key = BodyLeaf::press_id(body.dock_area);
-                BodyLeaf::retain_first_request(d, key, (body.source, response.id));
+                BodyLeaf::retain_first_request(d, key, ui.ctx().cumulative_pass_nr(), (body.source, response.id));
             });
         }
         let dragged = response.dragged() && ui.input(|i| i.pointer.is_decidedly_dragging());
@@ -212,7 +212,7 @@ impl DockArea<'_, ()> {
             ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::Grabbing);
             ui.data_mut(|d| {
                 let key = BodyLeaf::request_id(body.dock_area);
-                BodyLeaf::retain_first_request(d, key, (body.source, response.id));
+                BodyLeaf::retain_first_request(d, key, ui.ctx().cumulative_pass_nr(), (body.source, response.id));
             });
         } else if response.hovered() && ui.ctx().dragged_id().is_none() {
             ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::Grab);
@@ -234,13 +234,18 @@ struct BodyLeaf {
 }
 
 impl BodyLeaf {
+    /// First handle wins within a pass, but an unconsumed request cannot block later passes.
     fn retain_first_request(
         data: &mut egui::util::IdTypeMap,
         key: Id,
+        pass: u64,
         request: (Option<DragSource>, Id),
     ) {
-        if data.get_temp::<(Option<DragSource>, Id)>(key).is_none() {
-            data.insert_temp(key, request);
+        if !data
+            .get_temp::<(u64, Option<DragSource>, Id)>(key)
+            .is_some_and(|(stored_pass, _, _)| stored_pass == pass)
+        {
+            data.insert_temp(key, (pass, request.0, request.1));
         }
     }
 
@@ -263,39 +268,60 @@ mod custom_handle_request_tests {
     use super::*;
 
     #[test]
-    fn competing_handles_preserve_first_press_and_drag_request() {
+    fn competing_handles_preserve_first_request_within_pass() {
         let ctx = Context::default();
         let area = Id::new("dock");
         let first = Id::new("first-handle");
         let second = Id::new("second-handle");
         for key in [BodyLeaf::press_id(area), BodyLeaf::request_id(area)] {
             ctx.data_mut(|data| {
-                BodyLeaf::retain_first_request(data, key, (None, first));
-                BodyLeaf::retain_first_request(data, key, (None, second));
+                BodyLeaf::retain_first_request(data, key, 10, (None, first));
+                BodyLeaf::retain_first_request(data, key, 10, (None, second));
             });
             assert_eq!(
-                ctx.data_mut(|data| data.remove_temp::<(Option<DragSource>, Id)>(key)),
-                Some((None, first)),
+                ctx.data_mut(|data| data.remove_temp::<(u64, Option<DragSource>, Id)>(key)),
+                Some((10, None, first)),
             );
         }
     }
 
     #[test]
-    fn consumed_request_allows_next_gesture() {
+    fn unconsumed_request_does_not_block_a_later_pass() {
+        let ctx = Context::default();
+        let first = Id::new("first-handle");
+        let second = Id::new("second-handle");
+        for key in [
+            BodyLeaf::press_id(Id::new("dock")),
+            BodyLeaf::request_id(Id::new("dock")),
+        ] {
+            ctx.data_mut(|data| {
+                BodyLeaf::retain_first_request(data, key, 10, (None, first));
+                BodyLeaf::retain_first_request(data, key, 11, (None, second));
+                BodyLeaf::retain_first_request(data, key, 11, (None, first));
+            });
+            assert_eq!(
+                ctx.data_mut(|data| data.remove_temp::<(u64, Option<DragSource>, Id)>(key)),
+                Some((11, None, second)),
+            );
+        }
+    }
+
+    #[test]
+    fn consumed_request_allows_next_handle_in_same_pass() {
         let ctx = Context::default();
         let key = BodyLeaf::press_id(Id::new("dock"));
         let first = Id::new("first-handle");
         let second = Id::new("second-handle");
         ctx.data_mut(|data| {
-            BodyLeaf::retain_first_request(data, key, (None, first));
+            BodyLeaf::retain_first_request(data, key, 10, (None, first));
             assert_eq!(
-                data.remove_temp::<(Option<DragSource>, Id)>(key),
-                Some((None, first)),
+                data.remove_temp::<(u64, Option<DragSource>, Id)>(key),
+                Some((10, None, first)),
             );
-            BodyLeaf::retain_first_request(data, key, (None, second));
+            BodyLeaf::retain_first_request(data, key, 10, (None, second));
             assert_eq!(
-                data.remove_temp::<(Option<DragSource>, Id)>(key),
-                Some((None, second)),
+                data.remove_temp::<(u64, Option<DragSource>, Id)>(key),
+                Some((10, None, second)),
             );
         });
     }

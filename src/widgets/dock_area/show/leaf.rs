@@ -1982,10 +1982,12 @@ impl<Tab> DockArea<'_, Tab> {
         let Some(press) = state.tab_press else {
             return;
         };
-        if press.widget != widget
-            || press.path != path
-            || self.tab_identity(path, tab_viewer) != Some(press.tab_id)
-        {
+        // A different tab widget may be visited during the same UI pass.
+        // It cannot take over or cancel the gesture owned by the first widget.
+        if press.widget != widget {
+            return;
+        }
+        if press.path != path || self.tab_identity(path, tab_viewer) != Some(press.tab_id) {
             self.cancel_tab_drag(ui, state);
             return;
         }

@@ -795,7 +795,7 @@ mod tests {
         let mut viewer = Viewer { allow_windows: true };
         let mut area = DockArea::new(&mut dock);
         let original = area.group_drag_source(root).unwrap();
-        *area.dock_state.leaf_mut(root).unwrap() = crate::LeafNode::new(vec!["replacement"]);
+        *area.dock_state.leaf_mut(root).unwrap() = crate::dock_state::tree::node::LeafNode::new(vec!["replacement"]);
         let replacement = area.group_drag_source(root).unwrap();
         assert_ne!(original, replacement);
         assert!(!area.drag_source_valid(original, &mut viewer));

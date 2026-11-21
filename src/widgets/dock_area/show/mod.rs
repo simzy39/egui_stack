@@ -352,8 +352,8 @@ impl<Tab> DockArea<'_, Tab> {
             .is_some_and(|drag| !self.drag_source_valid(drag.source, tab_viewer))
         {
             drag_data = None;
-            state.finish_drag();
-            state.tab_in_air = None;
+            // The pointer may still be held. Suppress recapture by the new occupant.
+            self.cancel_tab_drag(ui, state);
         }
         let hover_data = if drag_data.is_some() {
             hover_data

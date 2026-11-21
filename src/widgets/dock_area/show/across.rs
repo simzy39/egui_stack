@@ -505,8 +505,6 @@ impl<Tab> DockArea<'_, Tab> {
         if let Some(to) = to {
             self.track_origins(&src, to, tab_viewer);
         }
-        #[cfg(feature = "bus")]
-        self.emit_moved(&destination);
         match src {
             TreeComponent::Node(path) => {
                 if !self.dock_state.move_node(path, destination) {
@@ -529,6 +527,9 @@ impl<Tab> DockArea<'_, Tab> {
             }
             TreeComponent::Surface(_) => unreachable!("drag sources cannot be surfaces"),
         }
+        // Notify observers only after DockState confirms that the move occurred.
+        #[cfg(feature = "bus")]
+        self.emit_moved(&destination);
         true
     }
 

@@ -303,11 +303,8 @@ impl<Tab> DockArea<'_, Tab> {
             {
                 space.floating.session = None;
             }
-            if let Some(id) = ui.ctx().dragged_id() {
-                state.drag_lost = Some(id);
-                ui.ctx().stop_dragging();
-            }
-            state.finish_drag();
+            // cancel_tab_drag already stops egui's drag and clears retained
+            // state. Do not attempt to recover a dragged ID after stopping it.
             state.tab_in_air = None;
             self.forget_verdicts();
         }

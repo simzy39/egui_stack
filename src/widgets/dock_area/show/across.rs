@@ -513,14 +513,12 @@ impl<Tab> DockArea<'_, Tab> {
         destination: &TabDestination,
         identity: Option<&DestinationIdentity>,
     ) -> bool {
-        let Some(identity) = identity else {
-            return true;
-        };
         match destination {
-            TabDestination::Node(path, _) => {
+            TabDestination::Node(path, _) => identity.is_some_and(|identity| {
                 self.current_destination_identity(*path).as_ref() == Some(identity)
-            }
-            _ => false,
+            }),
+            // Non-node destinations have no node identity to validate.
+            _ => identity.is_none(),
         }
     }
 
@@ -781,6 +779,8 @@ mod tests {
                 let mut area = DockArea::dock(&mut space, "main");
                 let src = if group { area.group_drag_source(path).unwrap() } else { src };
                 assert!(area.is_float_dock(target));
+                let destination_identity = area
+                    .capture_destination_identity(NodePath::new(target, NodeIndex::root()));
                 area.release_over(
                     Report {
                         stamp: 0,
@@ -789,7 +789,7 @@ mod tests {
                             NodePath::new(target, NodeIndex::root()),
                             TabInsert::Append,
                         )),
-                        destination_identity: None,
+                        destination_identity,
                         unfold: None,
                     },
                     src,
@@ -965,12 +965,13 @@ mod tests {
         area.dock_state.leaf_mut(target_path).unwrap().tabs.pop();
         let destination = TabDestination::Node(target_path, TabInsert::Insert(TabIndex(2)));
         assert!(!area.destination_valid(&destination));
+        let destination_identity = area.capture_destination_identity(target_path);
         area.release_over(
             Report {
                 stamp: 0,
                 rank: 0,
                 outcome: Outcome::Drop(destination),
-                destination_identity: None,
+                destination_identity,
                 unfold: None,
             },
             source,
@@ -1154,12 +1155,13 @@ mod tests {
             area.group_drag_source(source_path),
             Some(source),
         );
+        let destination_identity = area.capture_destination_identity(target_path);
         area.release_over(
             Report {
                 stamp: 0,
                 rank: 0,
                 outcome: Outcome::Drop(TabDestination::Node(target_path, TabInsert::Append)),
-                destination_identity: None,
+                destination_identity,
                 unfold: None,
             },
             source,
@@ -1190,12 +1192,13 @@ mod tests {
         area.dock_state.leaf_mut(source_path).unwrap().tabs[0] = "replacement";
 
         // Exercise the actual remote-release boundary, not only apply_move.
+        let destination_identity = area.capture_destination_identity(target_path);
         area.release_over(
             Report {
                 stamp: 0,
                 rank: 0,
                 outcome: Outcome::Drop(TabDestination::Node(target_path, TabInsert::Append)),
-                destination_identity: None,
+                destination_identity,
                 unfold: None,
             },
             source,
@@ -1238,6 +1241,7 @@ mod tests {
         };
         let session = DragSession::new(source, rect, egui::ViewportId::ROOT, Pos2::ZERO);
         assert!(area.drag_source_valid(session.payload, &mut viewer));
+        let destination_identity = area.capture_destination_identity(destination_path);
         area.release_over(
             Report {
                 stamp: 0,
@@ -1246,7 +1250,7 @@ mod tests {
                     destination_path,
                     TabInsert::Append,
                 )),
-                destination_identity: None,
+                destination_identity,
                 unfold: None,
             },
             session.payload,
@@ -1787,8 +1791,19 @@ mod tests {
                 Some(&destination_identity),
             ));
         }
-        assert!(area.reported_destination_identity_valid(
+        assert!(!area.reported_destination_identity_valid(
             &TabDestination::Node(destination_path, TabInsert::Append),
+            None,
+        ));
+    }
+
+    #[test]
+    fn node_destination_without_reported_identity_fails_closed() {
+        let mut dock = DockState::new(vec!["target"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let area = DockArea::new(&mut dock);
+        assert!(!area.reported_destination_identity_valid(
+            &TabDestination::Node(root, TabInsert::Append),
             None,
         ));
     }

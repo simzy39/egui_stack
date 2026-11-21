@@ -156,6 +156,26 @@ mod retained_source_tests {
     }
 
     #[test]
+    fn click_only_release_clears_retained_group_and_modifier() {
+        let path = NodePath::new(SurfaceIndex::main(), crate::NodeIndex::root());
+        let mut state = State {
+            group_press: Some(GroupPress {
+                widget: Id::new("handle"),
+                source: DragSource::Group { path, id: 7 },
+            }),
+            drag_carries_group: Some(true),
+            ..State::default()
+        };
+        // This is the same cleanup performed on primary-button release,
+        // even when no drag threshold was crossed.
+        state.finish_drag();
+        assert!(state.group_press.is_none());
+        assert!(state.drag_carries_group.is_none());
+        assert!(state.drag_start.is_none());
+        assert!(!state.tab_drag_cancelled);
+    }
+
+    #[test]
     fn finishing_a_drag_clears_both_sources_and_modifier_mode() {
         let mut state = State {
             group_press: Some(GroupPress {

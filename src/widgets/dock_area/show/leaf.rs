@@ -1887,6 +1887,11 @@ impl<Tab> DockArea<'_, Tab> {
         }) = state.group_press else {
             return;
         };
+        // Other handles can be visited during the same UI pass. They must not
+        // cancel a gesture owned by the original handle.
+        if press.widget != widget {
+            return;
+        }
         if !press.matches(widget, path, id) || !self.group_source_valid(path, id) {
             self.cancel_tab_drag(ui, state);
             return;

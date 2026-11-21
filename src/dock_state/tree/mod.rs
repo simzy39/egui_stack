@@ -1373,6 +1373,18 @@ mod test {
     #[derive(Copy, Clone, Debug, PartialEq)]
     struct Tab(u64);
 
+    #[test]
+    fn invalid_tab_removal_does_not_change_tree_or_focus() {
+        let mut tree = Tree::new(vec![Tab(0), Tab(1)]);
+        let root = NodeIndex::root();
+        let focus = tree.focused_leaf();
+
+        assert_eq!(tree.remove_tab((root, TabIndex(99))), None);
+        assert_eq!(tree.remove_tab((NodeIndex(999), TabIndex(0))), None);
+        assert_eq!(tree.leaf(root).unwrap().tabs, [Tab(0), Tab(1)]);
+        assert_eq!(tree.focused_leaf(), focus);
+    }
+
     /// Checks that `retain` works after removing a node
     #[test]
     fn remove_and_retain() {

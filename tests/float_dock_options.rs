@@ -433,7 +433,7 @@ fn decorate_reports_the_tab_bar_of_a_float_over_the_main_window() {
 
 #[test]
 #[cfg_attr(miri, ignore = "drives a whole UI; too slow under Miri")]
-fn a_space_rebuilt_during_a_drag_keeps_its_floats() {
+fn a_space_rebuilt_during_a_drag_keeps_its_floats_and_cancels_the_old_gesture() {
     let mut multi = Multi::new();
     let mut app = app(FloatHost::Native, Options::default());
     multi.passes(3, frame(&mut app));
@@ -451,9 +451,12 @@ fn a_space_rebuilt_during_a_drag_keeps_its_floats() {
     rebuilt.add_dock("main", DockRules::default(), strings(&["A", "B"]));
     rebuilt.add_dock("side", DockRules::default(), strings(&["S"]));
     rebuilt.add_dock("float-1", DockRules::default(), strings(&["C"]));
-    rebuilt.carry_floats_from(&mut app.docked.space);
+    rebuilt.carry_floats_from(&mut app.docked.space, &app.docked.layout);
     app.docked.space = rebuilt;
-    assert!(app.docked.space.dragging().is_some(), "the drag carried");
+    assert!(
+        app.docked.space.dragging().is_none(),
+        "a new leaf cannot inherit the old gesture"
+    );
     assert_eq!(app.docked.space.float_host(), FloatHost::Native);
     assert!(
         app.docked.space.origin(Id::unique("C")).is_some(),
@@ -464,8 +467,12 @@ fn a_space_rebuilt_during_a_drag_keeps_its_floats() {
     multi.passes(3, frame(&mut app));
     let mut landed = tabs(&app, "float-1");
     landed.sort();
-    assert_eq!(landed, ["B", "C"]);
-    assert_eq!(tabs(&app, "main"), ["A"]);
+    assert_eq!(landed, ["C"]);
+    assert_eq!(tabs(&app, "main"), ["A", "B"]);
+    assert!(
+        multi.shown().contains(&viewport("float-1")),
+        "the floating viewport survived"
+    );
     let builders: Vec<_> = multi.take_commands(viewport("float-1"));
     assert!(
         !builders
@@ -492,7 +499,7 @@ fn a_drag_whose_tab_is_gone_from_the_rebuilt_space_is_dropped() {
     rebuilt.add_dock("main", DockRules::default(), strings(&["A"]));
     rebuilt.add_dock("side", DockRules::default(), strings(&["S"]));
     rebuilt.add_dock("float-1", DockRules::default(), strings(&["C"]));
-    rebuilt.carry_floats_from(&mut app.docked.space);
+    rebuilt.carry_floats_from(&mut app.docked.space, &app.docked.layout);
     assert!(rebuilt.dragging().is_none());
     assert!(
         app.docked.space.dragging().is_none(),

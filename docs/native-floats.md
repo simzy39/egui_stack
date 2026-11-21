@@ -212,7 +212,7 @@ the native floats.
    progress, the events) lives in the `DockSpace`. Change the docks in place (`dock_mut`,
    `add_dock`, `remove_dock`) to keep it; an application that rebuilds its space from a layout
    of its own gives the new space the old one's id (`with_id`) and calls
-   `new.carry_floats_from(&mut old)` before drawing it.
+   `new.carry_floats_from(&mut old, &layout)` before drawing it.
 
 ## Steps
 
@@ -425,7 +425,7 @@ windows):
 - `DockArea::tab_bars(ctx, id)`: the same for any area, as of its last `show_inside` (the
   docks of a space drawn in one viewport share their id and their bars are listed together;
   a leaf's surface tells its dock).
-- `DockSpace::carry_floats_from(&mut old)`: the floats' state moves from a space to the one
+- `DockSpace::carry_floats_from(&mut old, &layout)`: the floats' state moves from a space to the one
   rebuilt to replace it; the drag in progress is dropped if what it drags is not at the same
   place in the new space, and the tabs' origins the new space lacks are added.
 - Tests: `tests/float_dock_options.rs` on the multi-viewport harness (the application's

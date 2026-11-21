@@ -1148,6 +1148,8 @@ impl<Tab> DockSpace<Tab> {
     /// A drag session is retained only when its source still matches the replacement state;
     /// old target reports and deferred releases are discarded until the new layout is drawn.
     /// Existing origin records in the replacement take precedence over transferred records.
+    /// Pass the completed replacement `layout`: it determines which named docks
+    /// own floats before the replacement has been drawn.
     ///
     /// The replacement layout is authoritative: this method does not recreate removed docks
     /// or restore their tabs. It replaces the destination's floating runtime state rather
@@ -1157,7 +1159,12 @@ impl<Tab> DockSpace<Tab> {
     /// The space ID is not transferred. Preserve it with [`with_id`](Self::with_id) so
     /// viewport and drag handles retain their identity. The old space keeps its docks and
     /// tabs but loses its floating runtime state and saved origins.
-    pub fn carry_floats_from(&mut self, old: &mut DockSpace<Tab>) {
+    pub fn carry_floats_from(&mut self, old: &mut DockSpace<Tab>, layout: &Layout) {
+        // Floating ownership is derived from the replacement layout. New docks
+        // have not been drawn yet, so their cached floating flags cannot be used.
+        for dock in &mut self.docks {
+            dock.floating = layout.float_of_dock(&dock.name).is_some();
+        }
         let mut floating = std::mem::take(&mut old.floating);
         if floating
             .session
@@ -1532,6 +1539,19 @@ mod detach_tests {
         Rect::from_min_size(egui::pos2(20.0, 30.0), egui::vec2(400.0, 300.0))
     }
 
+    fn float_layout<Tab>(space: &DockSpace<Tab>) -> Layout {
+        let mut layout = Layout::new(Zone::leaf("root", Content::Empty));
+        for dock in space.docks.iter().filter(|dock| dock.floating) {
+            layout.open_float(Float::dock(
+                &dock.name,
+                &dock.name,
+                FloatHost::InWindow,
+                Place::new(float_rect()),
+            ));
+        }
+        layout
+    }
+
     fn id(tab: &mut &'static str) -> Id {
         Id::unique(*tab)
     }
@@ -1545,7 +1565,8 @@ mod detach_tests {
         replacement.add_dock("float-27", DockRules::default(), vec!["floating"]);
         let index = replacement.dock_index("float-27").unwrap();
         replacement.docks[index].floating = true;
-        replacement.carry_floats_from(&mut old);
+        let layout = float_layout(&replacement);
+        replacement.carry_floats_from(&mut old, &layout);
         assert_eq!(replacement.floating.next, 27);
     }
 
@@ -1566,7 +1587,8 @@ mod detach_tests {
             None,
         ));
 
-        replacement.carry_floats_from(&mut old);
+        let layout = float_layout(&replacement);
+        replacement.carry_floats_from(&mut old, &layout);
 
         assert!(old.origins.is_empty());
         assert_eq!(replacement.origins.len(), 2);
@@ -1590,7 +1612,8 @@ mod detach_tests {
             tabs: vec![Id::unique("floating")],
             host: FloatHost::InWindow,
         });
-        replacement.carry_floats_from(&mut old);
+        let layout = float_layout(&replacement);
+        replacement.carry_floats_from(&mut old, &layout);
         assert_eq!(replacement.floating.pending.len(), 1);
         assert_eq!(replacement.floating.pending[0].dock, "float-1");
     }
@@ -1608,7 +1631,8 @@ mod detach_tests {
         });
         let mut replacement = DockSpace::<&'static str>::new();
         replacement.add_dock("editor", DockRules::default(), vec!["one"]);
-        replacement.carry_floats_from(&mut old);
+        let layout = float_layout(&replacement);
+        replacement.carry_floats_from(&mut old, &layout);
         assert!(replacement.floating.pending.is_empty());
         assert!(old.floating.pending.is_empty());
     }
@@ -1635,7 +1659,8 @@ mod detach_tests {
         let index = replacement.dock_index("float-1").unwrap();
         replacement.docks[index].floating = true;
 
-        replacement.carry_floats_from(&mut old);
+        let layout = float_layout(&replacement);
+        replacement.carry_floats_from(&mut old, &layout);
 
         assert!(replacement.floating.window_move.is_none());
         assert_eq!(replacement.floating.grabs.len(), 1);
@@ -1659,7 +1684,8 @@ mod detach_tests {
 
         let mut replacement = DockSpace::<&'static str>::new();
         replacement.add_dock("editor", DockRules::default(), vec!["one"]);
-        replacement.carry_floats_from(&mut old);
+        let layout = float_layout(&replacement);
+        replacement.carry_floats_from(&mut old, &layout);
 
         assert!(replacement.floating.placed.is_empty());
         assert!(replacement.floating.chrome.is_empty());

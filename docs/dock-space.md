@@ -315,8 +315,10 @@ names and rules; each main tree becomes a dock, and their windows become the spa
 
 When rebuilding a `DockSpace` (for example after changing the arrangement of named docks),
 construct the replacement layout first and call
-`replacement.carry_floats_from(&mut previous)` **before drawing it**. Preserve the space ID
+`replacement.carry_floats_from(&mut previous, &replacement_layout)` **before drawing it**. Preserve the space ID
 with `DockSpace::with_id` when the rebuilt space represents the same UI.
+The replacement layout determines which named docks own floats; their cached UI
+flags have not been initialized yet.
 
 The replacement space owns the authoritative dock names and surfaces. The transfer carries
 floating runtime configuration, pending opens, unconsumed float events and saved tab origins;

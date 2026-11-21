@@ -1059,18 +1059,14 @@ impl<Tab> DockState<Tab> {
     {
         // Docked surfaces keep their (maybe empty) tree; emptied windows leave a hole, so that
         // the surfaces after them keep their index.
-        for (index, surface) in self.surfaces.iter_mut().enumerate() {
-            let was_vacant = surface.is_empty();
+        // Retention may change tab order, remove nodes, or replace an occupied
+        // window with a vacancy. Invalidate *before* invoking user code so even
+        // a retained drag report cannot outlive a reentrant structural edit.
+        self.surface_identities.fill(0);
+        for surface in &mut self.surfaces {
             match surface {
                 Surface::Main(tree) => tree.retain_tabs(&mut predicate),
                 surface => surface.retain_tabs(&mut predicate),
-            }
-            // Retaining tabs may turn a legacy window into a vacant surface.
-            // The old slot identity must not identify that new vacancy.
-            if was_vacant != surface.is_empty() {
-                if let Some(identity) = self.surface_identities.get_mut(index) {
-                    *identity = 0;
-                }
             }
         }
         while self.surfaces.len() > 1 && self.surfaces.last().is_some_and(Surface::is_empty) {
@@ -1258,6 +1254,22 @@ mod test {
         ));
         assert_eq!(dock.leaf(root).unwrap().tabs, ["first", "second"]);
         assert!(dock.get_surface(empty_surface).unwrap().is_empty());
+    }
+
+    #[test]
+    fn retaining_tabs_invalidates_identity_even_when_surface_stays_occupied() {
+        let mut dock = DockState::new(vec!["keep", "remove"]);
+        let other = dock.add_window(vec!["other"]);
+        let main = SurfaceIndex::main();
+        let main_before = dock.capture_surface_identity(main).unwrap();
+        let other_before = dock.capture_surface_identity(other).unwrap();
+
+        dock.retain_tabs(|tab| *tab != "remove");
+
+        assert_eq!(dock.current_surface_identity(main), None);
+        assert_eq!(dock.current_surface_identity(other), None);
+        assert_ne!(dock.capture_surface_identity(main), Some(main_before));
+        assert_ne!(dock.capture_surface_identity(other), Some(other_before));
     }
 
     #[test]

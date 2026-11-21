@@ -814,7 +814,7 @@ impl<Tab> DockArea<'_, Tab> {
             };
 
             if self.draggable_tabs
-                && !state.drag_carries_group.unwrap_or_else(|| self.modifiers_carry_group(tabs_ui))
+                && state.drag_carries_group != Some(true)
                 && (response.is_pointer_button_down_on() || is_being_dragged)
             {
                 self.remember_tab_press(tabs_ui, state, id, (path, tab_index).into(), tab_viewer);

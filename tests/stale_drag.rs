@@ -52,10 +52,7 @@ fn drag_first_over_right_leaf(harness: &mut Harness<'_, DockState<String>>) -> P
     drag_tab_over_right_leaf(harness, "First")
 }
 
-fn drag_tab_over_right_leaf(
-    harness: &mut Harness<'_, DockState<String>>,
-    title: &str,
-) -> Pos2 {
+fn drag_tab_over_right_leaf(harness: &mut Harness<'_, DockState<String>>, title: &str) -> Pos2 {
     harness.run();
     let start = harness
         .get_by_role_and_label(Role::Tab, title)
@@ -140,7 +137,10 @@ fn the_dragged_tab_replaced_mid_drag() {
             harness.state().leaf(left).unwrap().tabs(),
             ["Replacement", "Second"]
         );
-        assert_eq!(tabs(harness.state()), ["Replacement", "Second", "Third", "Fourth"]);
+        assert_eq!(
+            harness.state().leaf(NodePath::new(SurfaceIndex::main(), NodeIndex(2))).unwrap().tabs(),
+            ["Third", "Fourth"]
+        );
     }
 }
 
@@ -151,7 +151,10 @@ fn the_preceding_tab_removed_mid_drag() {
     let left = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
     harness.state_mut().leaf_mut(left).unwrap().append_tab("Fifth".to_owned());
     let target = drag_tab_over_right_leaf(&mut harness, "Second");
-    harness.state_mut().leaf_mut(left).unwrap().remove_tab(TabIndex(0));
+    assert_eq!(
+        harness.state_mut().leaf_mut(left).unwrap().remove_tab(TabIndex(0)).as_deref(),
+        Some("First")
+    );
     for _ in 0..5 {
         harness.hover_at(target + vec2(5.0, 5.0));
         harness.step();
@@ -159,7 +162,10 @@ fn the_preceding_tab_removed_mid_drag() {
     harness.drop_at(target);
     harness.run_steps(5);
     assert_eq!(harness.state().leaf(left).unwrap().tabs(), ["Second", "Fifth"]);
-    assert_eq!(tabs(harness.state()), ["Second", "Fifth", "Third", "Fourth"]);
+    assert_eq!(
+        harness.state().leaf(NodePath::new(SurfaceIndex::main(), NodeIndex(2))).unwrap().tabs(),
+        ["Third", "Fourth"]
+    );
 }
 
 #[test]

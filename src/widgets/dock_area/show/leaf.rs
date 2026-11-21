@@ -26,12 +26,9 @@ fn tab_body_id(dock_area_id: Id, path: NodePath, tab_id: Id) -> Id {
     dock_area_id.with((path.surface, "surface")).with(tab_id)
 }
 
-/// The id of the tab `index`'s widget in the tab bar of the leaf `path`.
-fn tab_widget_id(dock_area_id: Id, path: NodePath, index: TabIndex) -> Id {
-    dock_area_id
-        .with((path.surface, "surface"))
-        .with((path.node, "node"))
-        .with((index.0, "tab"))
+/// A tab header follows the logical tab across leaves and reordering within a surface.
+fn tab_widget_id(dock_area_id: Id, path: NodePath, tab_id: Id) -> Id {
+    dock_area_id.with((path.surface, "surface")).with(("tab-header", tab_id))
 }
 
 /// The height every button of a tab bar leaves free at the bottom of the bar: the line under
@@ -648,7 +645,11 @@ impl<Tab> DockArea<'_, Tab> {
         let mut roved = false;
         for tab_index in 0..tabs_len {
             let tab_index = TabIndex(tab_index);
-            let id = tab_widget_id(self.id, path, tab_index);
+            let logical_id = tab_viewer.id(&mut self.dock_state[path]
+                .get_leaf_mut()
+                .expect("This node must be a leaf")
+                .tabs[tab_index.0]);
+            let id = tab_widget_id(self.id, path, logical_id);
             let is_being_dragged = tabs_ui.ctx().is_being_dragged(id)
                 && tabs_ui.input(|i| i.pointer.is_decidedly_dragging())
                 && self.draggable_tabs;
@@ -2237,7 +2238,8 @@ impl<Tab> DockArea<'_, Tab> {
             // We are forced to use `Ui::new` because other methods (eg: push_id) always mix
             // the provided id with their own which would cause tabs to change id when moved
             // from node to node.
-            let id = tab_body_id(self.id, path, tab_viewer.id(tab));
+            let logical_id = tab_viewer.id(tab);
+            let id = tab_body_id(self.id, path, logical_id);
             ui.ctx().check_for_id_clash(id, body_rect, "a tab with id");
             // The body is the active tab's panel: under the leaf in the accessibility tree,
             // controlled and named by its tab when the tab bar shows it.
@@ -2250,7 +2252,7 @@ impl<Tab> DockArea<'_, Tab> {
                     .accessibility_parent(ui.unique_id())
                     .accessibility_role(Role::TabPanel),
             );
-            let tab_id = tab_widget_id(self.id, path, *active);
+            let tab_id = tab_widget_id(self.id, path, logical_id);
             if tab_bar_shown {
                 ui.ctx().accesskit_node_builder(tab_id, |node| {
                     node.push_controlled(id.accesskit_id());

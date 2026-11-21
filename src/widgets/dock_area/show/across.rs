@@ -728,6 +728,31 @@ mod tests {
     }
 
     #[test]
+    fn cross_viewport_tab_session_rejects_replaced_tab_in_unchanged_slot() {
+        let mut dock = DockState::new(vec!["original", "other"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let source = DragSource::Tab {
+            path: TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(0)),
+            id: Id::unique("original"),
+        };
+        let rect = Rect::from_min_size(Pos2::ZERO, egui::vec2(200.0, 100.0));
+        let session = DragSession::new(source, rect, egui::ViewportId::ROOT, Pos2::ZERO);
+        let mut viewer = Viewer { allow_windows: true };
+        let mut area = DockArea::new(&mut dock);
+        assert!(area.drag_source_valid(session.payload, &mut viewer));
+
+        // The session still names an existing tab slot, but the tab has changed.
+        area.dock_state.leaf_mut(root).unwrap().tabs[0] = "replacement";
+        assert!(!area.drag_source_valid(session.payload, &mut viewer));
+        assert!(!area.apply_move(
+            session.payload,
+            TabDestination::Node(root, TabInsert::Append),
+            &mut viewer,
+        ));
+        assert_eq!(area.dock_state.leaf(root).unwrap().tabs, ["replacement", "other"]);
+    }
+
+    #[test]
     fn retained_tab_identity_rejects_reordering_but_not_appending() {
         let mut dock = DockState::new(vec!["first", "second"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());

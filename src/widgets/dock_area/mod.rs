@@ -258,6 +258,49 @@ impl BodyLeaf {
     }
 }
 
+#[cfg(test)]
+mod custom_handle_request_tests {
+    use super::*;
+
+    #[test]
+    fn competing_handles_preserve_first_press_and_drag_request() {
+        let ctx = Context::default();
+        let area = Id::new("dock");
+        let first = Id::new("first-handle");
+        let second = Id::new("second-handle");
+        for key in [BodyLeaf::press_id(area), BodyLeaf::request_id(area)] {
+            ctx.data_mut(|data| {
+                BodyLeaf::retain_first_request(data, key, (None, first));
+                BodyLeaf::retain_first_request(data, key, (None, second));
+            });
+            assert_eq!(
+                ctx.data_mut(|data| data.remove_temp::<(Option<DragSource>, Id)>(key)),
+                Some((None, first)),
+            );
+        }
+    }
+
+    #[test]
+    fn consumed_request_allows_next_gesture() {
+        let ctx = Context::default();
+        let key = BodyLeaf::press_id(Id::new("dock"));
+        let first = Id::new("first-handle");
+        let second = Id::new("second-handle");
+        ctx.data_mut(|data| {
+            BodyLeaf::retain_first_request(data, key, (None, first));
+            assert_eq!(
+                data.remove_temp::<(Option<DragSource>, Id)>(key),
+                Some((None, first)),
+            );
+            BodyLeaf::retain_first_request(data, key, (None, second));
+            assert_eq!(
+                data.remove_temp::<(Option<DragSource>, Id)>(key),
+                Some((None, second)),
+            );
+        });
+    }
+}
+
 /// How the keyboard focus reaches the tabs of a tab bar, set with [`DockArea::tab_focus`], or
 /// the tools of a [`ToolRow`](crate::toolbar::ToolRow), set with
 /// [`ToolRow::tab_focus`](crate::toolbar::ToolRow::tab_focus) (where [`Roving`](Self::Roving)

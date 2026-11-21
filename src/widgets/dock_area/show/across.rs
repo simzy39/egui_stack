@@ -634,15 +634,15 @@ impl<Tab> DockArea<'_, Tab> {
         }
         // Use the same no-op rules as DockState, including a sole tab
         // splitting its own leaf. No-op drops must not unfold a zone.
-        if let TabDestination::Node(target, _) = &destination {
-            if matches!(source, DragSource::Group { path, .. } if path == *target) {
-                return false;
-            }
+        if let TabDestination::Node(target, _) = &destination
+            && matches!(source, DragSource::Group { path, .. } if path == *target)
+        {
+            return false;
         }
-        if let DragSource::Tab { path, .. } = source {
-            if self.dock_state.tab_move_is_noop(path, &destination) {
-                return false;
-            }
+        if let DragSource::Tab { path, .. } = source
+            && self.dock_state.tab_move_is_noop(path, &destination)
+        {
+            return false;
         }
         let to = match destination {
             TabDestination::Node(path, _) => Some(path.surface),

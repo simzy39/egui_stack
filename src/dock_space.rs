@@ -1216,14 +1216,13 @@ impl<Tab> DockSpace<Tab> {
         // than the previous runtime counter. Never allocate a previously used
         // float name after rebuilding the space.
         for dock in &self.docks {
-            if dock.floating {
-                if let Some(number) = dock
+            if dock.floating
+                && let Some(number) = dock
                     .name
                     .strip_prefix("float-")
                     .and_then(|suffix| suffix.parse::<u32>().ok())
-                {
-                    floating.next = floating.next.max(number);
-                }
+            {
+                floating.next = floating.next.max(number);
             }
         }
         self.floating = floating;

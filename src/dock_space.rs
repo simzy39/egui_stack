@@ -1507,6 +1507,26 @@ mod detach_tests {
     }
 
     #[test]
+    fn carried_float_metadata_is_pruned_when_its_dock_disappears() {
+        let mut old = DockSpace::<&'static str>::new();
+        old.add_dock("editor", DockRules::default(), vec!["one"]);
+        old.floating.placed.insert("float-1".to_owned(), egui::pos2(10.0, 20.0));
+        old.floating.chrome.insert("float-1".to_owned(), 30.0);
+        old.floating.moving.insert("float-1".to_owned());
+        old.floating.close_asked.insert("float-1".to_owned());
+
+        let mut replacement = DockSpace::<&'static str>::new();
+        replacement.add_dock("editor", DockRules::default(), vec!["one"]);
+        replacement.carry_floats_from(&mut old);
+
+        assert!(replacement.floating.placed.is_empty());
+        assert!(replacement.floating.chrome.is_empty());
+        assert!(replacement.floating.moving.is_empty());
+        assert!(replacement.floating.close_asked.is_empty());
+        assert!(old.floating.placed.is_empty());
+    }
+
+    #[test]
     fn removing_dock_with_missing_surface_does_not_lose_registration() {
         let mut space = DockSpace::new();
         let surface = space.add_dock("editor", DockRules::default(), vec!["one"]);

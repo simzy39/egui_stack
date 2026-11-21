@@ -212,7 +212,9 @@ the native floats.
    progress, the events) lives in the `DockSpace`. Change the docks in place (`dock_mut`,
    `add_dock`, `remove_dock`) to keep it; an application that rebuilds its space from a layout
    of its own gives the new space the old one's id (`with_id`) and calls
-   `new.carry_floats_from(&mut old, &layout)` before drawing it.
+   `new.carry_floats_from(&mut old, &layout)` before drawing it, with the replacement
+   layout. Recreated leaves cancel old gestures even when they contain the same
+   logical tabs. Floating windows and their geometry survive independently.
 
 ## Steps
 
@@ -426,8 +428,10 @@ windows):
   docks of a space drawn in one viewport share their id and their bars are listed together;
   a leaf's surface tells its dock).
 - `DockSpace::carry_floats_from(&mut old, &layout)`: the floats' state moves from a space to the one
-  rebuilt to replace it; the drag in progress is dropped if what it drags is not at the same
-  place in the new space, and the tabs' origins the new space lacks are added.
+  rebuilt to replace it, using the replacement layout to identify surviving floating docks.
+  Tab drags are cancelled; a group drag can survive only when its exact runtime leaf remains
+  at its original path. Old target reports are discarded. The tabs' origins the new space
+  lacks are added.
 - Tests: `tests/float_dock_options.rs` on the multi-viewport harness (the application's
   painter paints a float's tab bar and its outline where positions are hidden, `configure`
   hides a float's buttons and disables its splits, `decorate` reports the tab bar at scales 1

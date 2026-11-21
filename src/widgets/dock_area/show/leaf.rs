@@ -1022,7 +1022,6 @@ impl<Tab> DockArea<'_, Tab> {
             }
 
             let leaf = self.dock_state.leaf_for_ui(path).unwrap();
-            let tab = &mut leaf.tabs[tab_index.0];
 
             if response.clicked()
                 || (tabs_ui.memory(|m| m.has_focus(title_id))
@@ -1067,16 +1066,14 @@ impl<Tab> DockArea<'_, Tab> {
                 {
                     leaf.active = TabIndex(target);
                     self.new_focused = Some(path);
-                    let target_id = self
-                        .id
-                        .with((path.surface, "surface"))
-                        .with((path.node, "node"))
-                        .with((target, "tab"));
+                    let target_id =
+                        tab_widget_id(self.id, path, tab_viewer.id(&mut leaf.tabs[target]));
                     tabs_ui.memory_mut(|m| m.request_focus(target_id));
                     roved = true;
                 }
             }
 
+            let tab = &mut leaf.tabs[tab_index.0];
             tab_viewer.on_tab_button(tab, &response);
 
             if self.show_close_buttons && tab_viewer.is_closeable(tab) && response.middle_clicked()

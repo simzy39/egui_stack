@@ -258,9 +258,20 @@ mod bus {
     #[cfg_attr(miri, ignore = "drives a whole UI; too slow under Miri")]
     fn a_drop_in_an_open_dock_names_its_zone() {
         let (mut harness, seen) = with_bus();
-        let target = harness.get_by_label("Editor").rect().center();
+        let target = harness
+            .get_by_role_and_label(egui::accesskit::Role::Tab, "Editor")
+            .rect()
+            .center();
         drop_at(&mut harness, "Preview", target);
         let seen = seen.lock().unwrap();
         assert_eq!(seen.moved, [named("centre", "centre")]);
+        let leaf = harness
+            .state()
+            .space
+            .dock("centre")
+            .unwrap()
+            .leaf(egui_stack::NodeIndex::root())
+            .unwrap();
+        assert_eq!(leaf.tabs, ["Preview", "Editor"]);
     }
 }

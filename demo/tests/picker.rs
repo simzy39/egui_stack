@@ -134,7 +134,10 @@ fn picks_a_separator() {
 fn copy_puts_the_pick_on_the_clipboard() {
     let mut harness = harness();
     start_picking(&mut harness);
-    let guide = harness.get_by_label("Guide").rect().center();
+    let guide = harness
+        .get_by_role_and_label(egui::accesskit::Role::Tab, "Guide")
+        .rect()
+        .center();
     harness.drag_at(guide);
     harness.drop_at(guide);
     harness.run();

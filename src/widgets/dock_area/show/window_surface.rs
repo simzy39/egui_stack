@@ -40,11 +40,17 @@ impl<Tab> DockArea<'_, Tab> {
         // egui sizes a window by its outer size: the frame's margins and stroke come on top of
         // what the content takes.
         let chrome = Frame::window(ui.style()).total_margin().sum();
+        let expanded = !self.dock_state[surf_index].is_collapsed()
+            && !self
+                .dock_state
+                .get_window_state(surf_index)
+                .unwrap()
+                .is_minimized();
         let (window, restored_height) = self
             .dock_state
             .get_window_state_mut(surf_index)
             .unwrap()
-            .create_window(id, bounds, chrome.y);
+            .create_window(id, bounds, chrome.y, expanded);
 
         // Calculate fading of the window (if any)
         let (fade_factor, fade_style) = match fade_style {

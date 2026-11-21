@@ -53,6 +53,8 @@ sentinels cannot be represented faithfully in JSON.
 Public raw mutable model access invalidates retained surface snapshots because it
 can replace components. Renderer access to geometry, selection and tab content
 preserves these snapshots. Structural renderer actions use model transactions.
+Construct leaves with `LeafNode::new`; runtime identity fields are private, so
+external struct literals must use the constructor and then set public properties.
 Applications using raw node replacement must preserve tree structure; the checked
 move APIs validate endpoints rather than repair arbitrary externally corrupted
 graphs. Saved trees are normalized when loaded, including obsolete active indices

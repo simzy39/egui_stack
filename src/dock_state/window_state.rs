@@ -183,6 +183,7 @@ impl WindowState {
         id: Id,
         bounds: Rect,
         chrome: f32,
+        expanded: bool,
     ) -> (egui::Window<'static>, Option<f32>) {
         let new = self.new;
         let mut window_constructor = egui::Window::new("")
@@ -197,7 +198,7 @@ impl WindowState {
             window_constructor = window_constructor.fixed_size(size);
         }
         // The height the window had before it was folded or minimized, now it is open again.
-        let restored_height = if new {
+        let restored_height = if new && expanded {
             self.expanded_height().map(|height| height + chrome)
         } else {
             None

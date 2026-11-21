@@ -811,6 +811,7 @@ impl<Tab> DockState<Tab> {
         self.leaf(path.node_path()).ok()?.tabs.get(path.tab.0)?;
         let size = self[path.node_path()]
             .rect()
+            .filter(|rect| window_state::valid_rect(*rect))
             .map_or(Vec2::new(100., 150.), |rect| rect.size());
         self.detach_tab(path, Rect::from_min_size(position, size))
     }

@@ -1295,7 +1295,7 @@ pub(crate) fn detach<Tab>(
     // Do not consume a float identifier until the move has committed.
     let mut next = floating.next;
     let name = loop {
-        next += 1;
+        next = next.checked_add(1)?;
         let name = format!("float-{next}");
         if !docks.iter().any(|dock| dock.name == name) {
             break name;
@@ -1503,6 +1503,24 @@ mod detach_tests {
         ).is_none());
         assert_eq!(space.docks.len(), 1);
         assert_eq!(space.floating.next, 0);
+        assert!(space.floating.pending.is_empty());
+        assert_eq!(space.state[surface][NodeIndex::root()].tabs_count(), 1);
+    }
+
+    #[test]
+    fn exhausted_float_identifiers_leave_state_unchanged() {
+        let mut space = DockSpace::new();
+        let surface = space.add_dock("editor", DockRules::default(), vec!["one"]);
+        space.floating.next = u32::MAX;
+        let path = TabPath::new(surface, NodeIndex::root(), TabIndex(0));
+        assert!(detach(
+            &mut space.state, &mut space.docks, &mut space.origins,
+            &mut space.floating, Detach::Tab(path), float_rect(), None,
+            FloatHost::Native, &mut id,
+        ).is_none());
+        assert_eq!(space.floating.next, u32::MAX);
+        assert_eq!(space.docks.len(), 1);
+        assert!(space.origins.is_empty());
         assert!(space.floating.pending.is_empty());
         assert_eq!(space.state[surface][NodeIndex::root()].tabs_count(), 1);
     }

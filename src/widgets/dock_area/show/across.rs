@@ -828,7 +828,7 @@ mod tests {
                 events,
                 ..Default::default()
             };
-            ctx.run(input, |_ctx| {});
+            let _ = ctx.run(input, |_ctx| {});
         };
 
         // The original press and subsequent movement occur in separate egui frames.

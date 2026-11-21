@@ -65,6 +65,24 @@ pub(crate) struct DragData {
     pub tab_id: Option<Id>,
 }
 
+/// A retained source has a mandatory logical identity for tabs. Group paths
+/// remain structural until leaves receive stable identities.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DragSource {
+    Tab { path: TabPath, id: Id },
+    Group(NodePath),
+}
+
+impl DragSource {
+    pub(crate) fn from_parts(source: TreeComponent, tab_id: Option<Id>) -> Option<Self> {
+        match source {
+            TreeComponent::Tab(path) => Some(Self::Tab { path, id: tab_id? }),
+            TreeComponent::Node(path) => Some(Self::Group(path)),
+            TreeComponent::Surface(_) => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum TreeComponent {
     Surface(SurfaceIndex),

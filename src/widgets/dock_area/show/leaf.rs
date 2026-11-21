@@ -2326,10 +2326,10 @@ impl<Tab> DockArea<'_, Tab> {
             // it's unnecessary to change the hover state
             let is_dragged_valid = match &state.dnd {
                 Some(DragDropState {
-                    drag: DragData { src, .. },
+                    drag: DragData { src, tab_id, .. },
                     ..
                 }) => {
-                    self.source_valid(src)
+                    self.drag_source_valid(src, *tab_id, tab_viewer)
                         && match *src {
                             TreeComponent::Tab(src_path) => {
                                 !self.dock_state.is_window(path.surface)

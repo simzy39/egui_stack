@@ -79,28 +79,19 @@ pub struct DockArea<'tree, Tab> {
 
 /// A deferred float always records a tab's logical identity, or a group's node.
 struct PendingFloat {
-    source: FloatSource,
+    source: drag_and_drop::DragSource,
     rect: Rect,
     host: Option<crate::layout::FloatHost>,
 }
 
-enum FloatSource {
-    Tab { path: crate::TabPath, id: Id },
-    Group(NodePath),
-}
-
-impl PendingFloat {
+ impl PendingFloat {
     fn from_drag(
         source: drag_and_drop::TreeComponent,
         rect: Rect,
         host: Option<crate::layout::FloatHost>,
         tab_id: Option<Id>,
     ) -> Option<Self> {
-        let source = match source {
-            drag_and_drop::TreeComponent::Tab(path) => FloatSource::Tab { path, id: tab_id? },
-            drag_and_drop::TreeComponent::Node(path) => FloatSource::Group(path),
-            drag_and_drop::TreeComponent::Surface(_) => return None,
-        };
+        let source = drag_and_drop::DragSource::from_parts(source, tab_id)?;
         Some(Self { source, rect, host })
     }
 }

@@ -6,9 +6,9 @@ use egui::{
 };
 
 use super::{
-    drag_and_drop::{DragData, DragDropState, HoverData, TreeComponent, make_overlay_painter},
+    drag_and_drop::{DragSource, DragData, DragDropState, HoverData, TreeComponent, make_overlay_painter},
     session::Outcome,
-    FloatSource, PendingFloat,
+    PendingFloat,
     state::State,
     tab_removal::TabRemoval,
 };
@@ -154,7 +154,7 @@ impl<Tab> DockArea<'_, Tab> {
                     .map_or(Vec2::new(100., 150.), |rect| rect.size());
                 if let Some(id) = self.tab_identity(path, tab_viewer) {
                     self.to_float.push(PendingFloat {
-                        source: FloatSource::Tab { path, id },
+                        source: DragSource::Tab { path, id },
                         rect: Rect::from_min_size(mouse_pos, size),
                         host: None,
                     });
@@ -168,7 +168,7 @@ impl<Tab> DockArea<'_, Tab> {
             match destination {
                 TabDestination::Window(rect) if self.floats_on() => {
                     self.to_float.push(PendingFloat {
-                        source: FloatSource::Group(path),
+                        source: DragSource::Group(path),
                         rect,
                         host: None,
                     });
@@ -181,8 +181,8 @@ impl<Tab> DockArea<'_, Tab> {
         // Recheck immediately before executing the deferred float.
         for PendingFloat { source, rect, host } in std::mem::take(&mut self.to_float) {
             let (source, tab_id) = match source {
-                FloatSource::Tab { path, id } => (TreeComponent::Tab(path), Some(id)),
-                FloatSource::Group(path) => (TreeComponent::Node(path), None),
+                DragSource::Tab { path, id } => (TreeComponent::Tab(path), Some(id)),
+                DragSource::Group(path) => (TreeComponent::Node(path), None),
             };
             let valid = self.drag_source_valid(&source, tab_id, tab_viewer);
             if valid {

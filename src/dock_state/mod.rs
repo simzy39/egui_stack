@@ -1059,13 +1059,23 @@ impl<Tab> DockState<Tab> {
     {
         // Docked surfaces keep their (maybe empty) tree; emptied windows leave a hole, so that
         // the surfaces after them keep their index.
-        for surface in &mut self.surfaces {
+        for (index, surface) in self.surfaces.iter_mut().enumerate() {
+            let was_vacant = surface.is_empty();
             match surface {
                 Surface::Main(tree) => tree.retain_tabs(&mut predicate),
                 surface => surface.retain_tabs(&mut predicate),
             }
+            // Retaining tabs may turn a legacy window into a vacant surface.
+            // The old slot identity must not identify that new vacancy.
+            if was_vacant != surface.is_empty() {
+                if let Some(identity) = self.surface_identities.get_mut(index) {
+                    *identity = 0;
+                }
+            }
         }
         while self.surfaces.len() > 1 && self.surfaces.last().is_some_and(Surface::is_empty) {
+            let index = self.surfaces.len() - 1;
+            self.invalidate_surface_identity(SurfaceIndex(index));
             self.surfaces.pop();
         }
         if let Some(focused) = self.focused_surface

@@ -200,6 +200,7 @@ impl<Tab> DockArea<'_, Tab> {
         }
 
         if !ui.input(|i| i.pointer.primary_down()) {
+            state.group_press = None;
             state.tab_press = None;
             state.tab_drag_cancelled = false;
         }
@@ -222,6 +223,13 @@ impl<Tab> DockArea<'_, Tab> {
 
         // A press can survive the drag threshold or a layout change. Validate it before
         // resolving any cached data, and suppress the old widget until the button is up.
+        if let Some(DragSource::Group { path, id }) = state.group_press
+            && !self.dock_state.leaf(path).is_ok_and(|leaf| {
+                id != 0 && leaf.drag_identity == id && !leaf.tabs.is_empty()
+            })
+        {
+            self.cancel_tab_drag(ui, state);
+        }
         if let Some(press) = state.tab_press
             && state.drag_carries_group != Some(true)
             && self.tab_identity(press.path, tab_viewer) != Some(press.tab_id)
@@ -503,6 +511,7 @@ impl<Tab> DockArea<'_, Tab> {
     fn cancel_tab_drag(&self, ui: &Ui, state: &mut State) {
         state.tab_drag_cancelled = true;
         state.tab_press = None;
+        state.group_press = None;
         state.reset_drag();
         state.dragged = None;
         state.dragged_node = None;

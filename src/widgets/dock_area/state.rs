@@ -2,7 +2,7 @@ use egui::{Context, Id, Pos2, Rect};
 
 use super::{
     DraggedNode, DraggedTab,
-    drag_and_drop::{DragData, DragDropState, HoverData},
+    drag_and_drop::{DragData, DragDropState, DragSource, HoverData},
 };
 use crate::{NodePath, Style, SurfaceIndex, TabPath};
 
@@ -19,6 +19,8 @@ pub(super) struct State {
     /// A tab pressed by this viewport, before or during drag activation.
     /// Kept until release, independently of the drag's activation distance.
     pub tab_press: Option<TabPress>,
+    /// Retained leaf identity from pointer-down, before drag activation.
+    pub group_press: Option<DragSource>,
     /// The original source changed; suppress dock drags until the primary button is up.
     pub tab_drag_cancelled: bool,
     pub last_hover_pos: Option<Pos2>,
@@ -53,6 +55,7 @@ impl State {
         ctx.data_mut(|d| d.get_temp(id)).unwrap_or(Self {
             drag_start: None,
             tab_press: None,
+            group_press: None,
             tab_drag_cancelled: false,
             last_hover_pos: None,
             dnd: None,

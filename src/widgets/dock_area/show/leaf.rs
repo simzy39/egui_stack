@@ -300,6 +300,9 @@ impl<Tab> DockArea<'_, Tab> {
             .hidden_tab_bar_drag_height
             .is_none_or(|h| h > 0.0);
         if self.draggable_tabs && drag_enabled && !on_button {
+            if self.hidden_tab_bar_drags_group && drag_response.is_pointer_button_down_on() {
+                self.remember_group_press(ui, state, path);
+            }
             if !self.hidden_tab_bar_drags_group && drag_response.is_pointer_button_down_on() {
                 let active = self.dock_state.leaf(path).unwrap().active;
                 self.remember_tab_press(ui, state, drag_id, (path, active).into(), tab_viewer);
@@ -855,6 +858,12 @@ impl<Tab> DockArea<'_, Tab> {
             };
 
             if self.draggable_tabs
+                && response.is_pointer_button_down_on()
+                && self.modifiers_carry_group(tabs_ui)
+            {
+                self.remember_group_press(tabs_ui, state, path);
+            }
+            if self.draggable_tabs
                 && state.drag_carries_group != Some(true)
                 && (response.is_pointer_button_down_on() || is_being_dragged)
             {
@@ -1348,6 +1357,9 @@ impl<Tab> DockArea<'_, Tab> {
             sense |= Sense::CLICK;
         }
         let response = ui.interact(tail, id, sense);
+        if drag && response.is_pointer_button_down_on() {
+            self.remember_group_press(ui, state, path);
+        }
         if drag {
             if response.hovered() && ui.ctx().dragged_id().is_none() {
                 ui.output_mut(|o| o.cursor_icon = CursorIcon::Grab);
@@ -1699,6 +1711,9 @@ impl<Tab> DockArea<'_, Tab> {
             .with((path.node, "node"))
             .with("group_grip");
         let response = ui.interact(rect, id, Sense::click_and_drag());
+        if response.is_pointer_button_down_on() {
+            self.remember_group_press(ui, state, path);
+        }
         let enabled = ui.is_enabled();
         response
             .widget_info(|| WidgetInfo::labeled(Role::Button, enabled, &self.labels.move_group));
@@ -1866,7 +1881,18 @@ impl<Tab> DockArea<'_, Tab> {
             .get_or_insert_with(|| Self::press_origin(ui, pointer_pos));
         let delta = pointer_pos - start;
         if self.drag_activated(delta) {
-            let Some(source) = self.group_drag_source(path) else { return; };
+            let Some(DragSource::Group { path: original, id }) = state.group_press else {
+                return;
+            };
+            if original != path
+                || !self.dock_state.leaf(path).is_ok_and(|leaf| {
+                    id != 0 && leaf.drag_identity == id && !leaf.tabs.is_empty()
+                })
+            {
+                state.tab_drag_cancelled = true;
+                return;
+            }
+            let source = DragSource::Group { path, id };
             state.dragged_node = Some(DraggedNode {
                 path,
                 pointer: pointer_pos,
@@ -1880,6 +1906,17 @@ impl<Tab> DockArea<'_, Tab> {
                     }),
                 );
             });
+        }
+    }
+
+    /// Capture a group source at pointer-down, before the drag threshold.
+    fn remember_group_press(&mut self, ui: &Ui, state: &mut State, path: NodePath) {
+        if state.group_press.is_none()
+            && !state.tab_drag_cancelled
+            && state.drag_lost.is_none()
+            && ui.input(|i| i.pointer.primary_down())
+        {
+            state.group_press = self.group_drag_source(path);
         }
     }
 

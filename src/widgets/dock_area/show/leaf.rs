@@ -189,11 +189,27 @@ impl<Tab> DockArea<'_, Tab> {
 
         // Body handles report their press separately from drag activation.
         let press_request = BodyLeaf::press_id(self.id);
-        if let Some((handle_path, handle_id)) = ui.data_mut(|d| d.remove_temp::<(NodePath, Id)>(press_request))
-            && handle_path == path
+        if let Some((Some(source), handle_id)) =
+            ui.data_mut(|d| d.remove_temp::<(Option<DragSource>, Id)>(press_request))
+            && source.component() == TreeComponent::Node(path)
             && self.draggable_tabs
+            && ui.input(|i| i.pointer.primary_down())
+            && state.group_press.is_none()
+            && state.tab_press.is_none()
+            && !state.tab_drag_cancelled
+            && state.drag_lost.is_none()
         {
-            self.remember_group_press(ui, state, handle_id, path);
+            // Body handles report one frame after their initial press.
+            // Keep the identity captured in that frame, never the leaf now
+            // occupying the same path.
+            if self.drag_source_valid(source, tab_viewer) {
+                state.group_press = Some(GroupPress {
+                    widget: handle_id,
+                    source,
+                });
+            } else {
+                self.cancel_tab_drag(ui, state);
+            }
         }
         // A handle of the body (`DockArea::drag_group_by`) asked to drag the group.
         let request = BodyLeaf::request_id(self.id);
@@ -2432,11 +2448,17 @@ impl<Tab> DockArea<'_, Tab> {
                         }
                         let available_rect = ui.available_rect_before_wrap();
                         ui.expand_to_include_rect(available_rect);
+                        let source = if self.draggable_tabs {
+                            self.group_drag_source(path)
+                        } else {
+                            None
+                        };
                         let outer = ui.data_mut(|d| {
                             let body = BodyLeaf {
                                 dock_area: self.id,
                                 path,
                                 draggable: self.draggable_tabs,
+                                source,
                             };
                             let outer = d.get_temp::<Option<BodyLeaf>>(BodyLeaf::id()).flatten();
                             d.insert_temp(BodyLeaf::id(), Some(body));

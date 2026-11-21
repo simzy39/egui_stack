@@ -469,25 +469,16 @@ impl<Tab> DockArea<'_, Tab> {
         if !self.destination_valid(&destination) {
             return false;
         }
-        // DockState::move_node treats a group dropped on itself as a no-op.
-        // Report that honestly so a rejected/no-op drop cannot unfold a zone.
+        // Use the same no-op rules as DockState, including a sole tab
+        // splitting its own leaf. No-op drops must not unfold a zone.
         if let TabDestination::Node(target, _) = &destination {
-            match source {
-                DragSource::Group { path, .. } if path == *target => return false,
-                DragSource::Tab { path, .. } if path.node_path() == *target => {
-                    let count = self.dock_state[path.node_path()].tabs_count();
-                    let unchanged = match destination {
-                        TabDestination::Node(_, TabInsert::Insert(index)) => {
-                            index.0 == path.tab.0 || index.0 == path.tab.0 + 1
-                        }
-                        TabDestination::Node(_, TabInsert::Append) => path.tab.0 + 1 == count,
-                        _ => count == 1,
-                    };
-                    if unchanged || count == 1 {
-                        return false;
-                    }
-                }
-                _ => {}
+            if matches!(source, DragSource::Group { path, .. } if path == *target) {
+                return false;
+            }
+        }
+        if let DragSource::Tab { path, .. } = source {
+            if self.dock_state.tab_move_is_noop(path, &destination) {
+                return false;
             }
         }
         let to = match destination {

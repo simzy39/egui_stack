@@ -449,6 +449,31 @@ impl<Tab> DockState<Tab> {
 
     /// Moves a tab from a node to another node.
     /// You need to specify with [`TabDestination`] how the tab should be moved.
+    /// Whether a valid tab move would leave the source leaf unchanged.
+    /// Insertion indices are measured before removing the source tab.
+    pub(crate) fn tab_move_is_noop(&self, src: TabPath, destination: &TabDestination) -> bool {
+        let TabDestination::Node(target, insert) = destination else {
+            return false;
+        };
+        if src.node_path() != *target {
+            return false;
+        }
+        let Ok(leaf) = self.leaf(src.node_path()) else {
+            return false;
+        };
+        let count = leaf.tabs.len();
+        if src.tab.0 >= count {
+            return false;
+        }
+        match insert {
+            TabInsert::Insert(index) => {
+                index.0 == src.tab.0 || index.0 == src.tab.0 + 1
+            }
+            TabInsert::Append => src.tab.0 + 1 == count,
+            TabInsert::Split(_) => count == 1,
+        }
+    }
+
     pub fn move_tab(&mut self, src: TabPath, dst_tab: impl Into<TabDestination>) -> bool {
         let destination = dst_tab.into();
         if self.leaf(src.node_path()).is_err_or(|leaf| src.tab.0 >= leaf.tabs.len()) {
@@ -463,20 +488,8 @@ impl<Tab> DockState<Tab> {
                 return true;
             }
             TabDestination::Node(dst, dst_tab) => {
-                if src.node_path() == dst {
-                    let count = self[src.node_path()].tabs_count();
-                    // Insertion positions refer to the pre-removal leaf. Reject
-                    // moves that leave the order unchanged, including a sole tab.
-                    let unchanged = match dst_tab {
-                        TabInsert::Insert(index) => {
-                            index.0 == src.tab.0 || index.0 == src.tab.0 + 1
-                        }
-                        TabInsert::Append => src.tab.0 + 1 == count,
-                        TabInsert::Split(_) => count == 1,
-                    };
-                    if unchanged {
-                        return false;
-                    }
+                if self.tab_move_is_noop(src, &destination) {
+                    return false;
                 }
 
                 // Call `Node::remove_tab` to avoid auto remove of the node by `Tree::remove_tab` from Tree.

@@ -714,6 +714,41 @@ mod tests {
     }
 
     #[test]
+    fn remote_release_rejects_destination_insert_index_stale_after_tab_removal() {
+        let mut dock = DockState::new(vec!["source"]);
+        dock.main_surface_mut()
+            .split_right(NodeIndex::root(), 0.5, vec!["first", "second"]);
+        let source_path = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
+        let target_path = NodePath::new(SurfaceIndex::main(), NodeIndex(2));
+        let source = DragSource::Tab {
+            path: TabPath::new(SurfaceIndex::main(), NodeIndex(1), TabIndex(0)),
+            id: Id::unique("source"),
+        };
+        let rect = Rect::from_min_size(Pos2::ZERO, egui::vec2(200.0, 100.0));
+        let mut viewer = Viewer { allow_windows: true };
+        let mut area = DockArea::new(&mut dock);
+
+        // The preview allowed insertion at index two, but a tab was removed
+        // before the receiving viewport processed the release.
+        area.dock_state.leaf_mut(target_path).unwrap().tabs.pop();
+        let destination = TabDestination::Node(target_path, TabInsert::Insert(TabIndex(2)));
+        assert!(!area.destination_valid(&destination));
+        area.release_over(
+            Report {
+                stamp: 0,
+                rank: 0,
+                outcome: Outcome::Drop(destination),
+                unfold: None,
+            },
+            source,
+            rect,
+            &mut viewer,
+        );
+        assert_eq!(area.dock_state.leaf(source_path).unwrap().tabs, ["source"]);
+        assert_eq!(area.dock_state.leaf(target_path).unwrap().tabs, ["first"]);
+    }
+
+    #[test]
     fn group_drag_moves_current_leaf_contents_after_membership_changes() {
         let mut dock = DockState::new(vec!["original", "removed"]);
         dock.main_surface_mut()

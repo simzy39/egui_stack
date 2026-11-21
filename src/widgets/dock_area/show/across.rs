@@ -773,6 +773,35 @@ mod tests {
     }
 
     #[test]
+    fn cloned_layout_does_not_inherit_active_group_identity() {
+        let mut original = DockState::new(vec!["original"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let mut viewer = Viewer { allow_windows: true };
+        let source = {
+            let mut area = DockArea::new(&mut original);
+            area.group_drag_source(root).unwrap()
+        };
+        let mut cloned = original.clone();
+        let mut area = DockArea::new(&mut cloned);
+        assert!(!area.drag_source_valid(source, &mut viewer));
+        assert!(area.drag_source_valid(area.group_drag_source(root).unwrap(), &mut viewer));
+    }
+
+    #[test]
+    fn retained_group_identity_does_not_adopt_a_new_leaf_at_same_path() {
+        let mut dock = DockState::new(vec!["original"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let mut viewer = Viewer { allow_windows: true };
+        let mut area = DockArea::new(&mut dock);
+        let original = area.group_drag_source(root).unwrap();
+        *area.dock_state.leaf_mut(root).unwrap() = crate::LeafNode::new(vec!["replacement"]);
+        let replacement = area.group_drag_source(root).unwrap();
+        assert_ne!(original, replacement);
+        assert!(!area.drag_source_valid(original, &mut viewer));
+        assert!(area.drag_source_valid(replacement, &mut viewer));
+    }
+
+    #[test]
     fn group_identity_survives_content_changes_but_not_cloning() {
         let mut dock = DockState::new(vec!["original"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());

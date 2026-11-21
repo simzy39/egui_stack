@@ -176,3 +176,19 @@ fn appending_an_unrelated_tab_does_not_cancel_a_drag() {
     all.sort();
     assert_eq!(all, ["Fifth", "First", "Fourth", "Second", "Third"]);
 }
+
+#[test]
+#[cfg_attr(miri, ignore = "drives a whole UI; too slow under Miri")]
+fn reordering_tabs_cancels_drag_and_allows_a_new_drag() {
+    let mut harness = harness();
+    let target = drag_first_over_right_leaf(&mut harness);
+    let left = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
+    harness.state_mut().leaf_mut(left).unwrap().tabs_mut().swap(0, 1);
+    harness.drop_at(target);
+    harness.run_steps(5);
+    assert_eq!(harness.state().leaf(left).unwrap().tabs(), ["Second", "First"]);
+    let target = drag_tab_over_right_leaf(&mut harness, "First");
+    harness.drop_at(target);
+    harness.run_steps(5);
+    assert_eq!(harness.state().leaf(left).unwrap().tabs(), ["Second"]);
+}

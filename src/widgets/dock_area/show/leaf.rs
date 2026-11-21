@@ -16,7 +16,7 @@ use crate::{
     TabFocus, TabIndex, TabInsert, TabMeasure, TabPaint, TabStyle, TabViewer,
     dock_area::{
         drag_and_drop::{DragData, DragDropState, HoverData, TreeComponent},
-        state::State,
+        state::{State, TabPress},
     },
     utils::{fade_visuals, rect_set_size_centered},
     widgets::painter::{Attached, corners_within},
@@ -813,7 +813,10 @@ impl<Tab> DockArea<'_, Tab> {
                 (response, title_id)
             };
 
-            if self.draggable_tabs && (response.is_pointer_button_down_on() || is_being_dragged) {
+            if self.draggable_tabs
+                && state.drag_carries_group != Some(true)
+                && (response.is_pointer_button_down_on() || is_being_dragged)
+            {
                 self.remember_tab_press(tabs_ui, state, id, (path, tab_index).into(), tab_viewer);
             }
 
@@ -822,6 +825,7 @@ impl<Tab> DockArea<'_, Tab> {
                     .drag_carries_group
                     .get_or_insert_with(|| self.modifiers_carry_group(tabs_ui));
                 if carries_group {
+                    state.tab_press = None;
                     self.try_initiate_node_drag(tabs_ui, state, path);
                 } else {
                     self.try_initiate_tab_drag(tabs_ui, state, id, (path, tab_index).into(), tab_viewer);
@@ -1853,7 +1857,7 @@ impl<Tab> DockArea<'_, Tab> {
             return;
         }
         if let Some(tab_id) = self.tab_identity(path, tab_viewer) {
-            state.tab_press = Some((widget, path, tab_id));
+            state.tab_press = Some(TabPress { widget, path, tab_id });
         }
     }
 
@@ -1871,12 +1875,12 @@ impl<Tab> DockArea<'_, Tab> {
         if state.tab_drag_cancelled || state.drag_lost.is_some() {
             return;
         }
-        let Some((pressed_widget, pressed_path, tab_id)) = state.tab_press else {
+        let Some(press) = state.tab_press else {
             return;
         };
-        if pressed_widget != widget
-            || pressed_path != path
-            || self.tab_identity(path, tab_viewer) != Some(tab_id)
+        if press.widget != widget
+            || press.path != path
+            || self.tab_identity(path, tab_viewer) != Some(press.tab_id)
         {
             self.cancel_tab_drag(ui, state);
             return;
@@ -1900,7 +1904,7 @@ impl<Tab> DockArea<'_, Tab> {
                 Some(DragData {
                     src: TreeComponent::Tab(path),
                     rect: self.dock_state[path.node_path()].rect().unwrap(),
-                    tab_id: Some(tab_id),
+                    tab_id: Some(press.tab_id),
                 }),
             );
         });

@@ -6,12 +6,19 @@ use super::{
 };
 use crate::{NodePath, Style, SurfaceIndex, TabPath};
 
+#[derive(Clone, Copy, Debug)]
+pub(super) struct TabPress {
+    pub widget: Id,
+    pub path: TabPath,
+    pub tab_id: Id,
+}
+
 #[derive(Clone, Debug, Default)]
 pub(super) struct State {
     pub drag_start: Option<Pos2>,
     /// A tab pressed by this viewport, before or during drag activation.
     /// Kept until release, independently of the drag's activation distance.
-    pub tab_press: Option<(Id, TabPath, Id)>,
+    pub tab_press: Option<TabPress>,
     /// The original source changed; suppress dock drags until the primary button is up.
     pub tab_drag_cancelled: bool,
     pub last_hover_pos: Option<Pos2>,

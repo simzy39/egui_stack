@@ -8,7 +8,10 @@ pub trait TabViewer {
     /// The type of tab in which you can store state to be drawn in your tabs.
     type Tab;
 
-    /// Unique ID for this tab.
+    /// Unique, stable ID for this tab.
+    ///
+    /// The ID must remain unchanged during a drag, and must distinguish different tabs.
+    /// It may be requested for inactive tabs as well as the active tab.
     ///
     /// Assuming `Tab` implements `Hash`, you can simply do `Id::new(tab)`.
     /// If that is not possible, but tab names are guaranteed to be unique,

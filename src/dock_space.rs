@@ -1289,9 +1289,11 @@ pub(crate) fn detach<Tab>(
             record_origin(state, docks, &mut pending_origins, path, id_of);
         }
     }
+    // Do not consume a float identifier until the move has committed.
+    let mut next = floating.next;
     let name = loop {
-        floating.next += 1;
-        let name = format!("float-{}", floating.next);
+        next += 1;
+        let name = format!("float-{next}");
         if !docks.iter().any(|dock| dock.name == name) {
             break name;
         }
@@ -1317,6 +1319,7 @@ pub(crate) fn detach<Tab>(
         return None;
     }
     *origins = pending_origins;
+    floating.next = next;
     floating.pending.push(PendingFloat {
         dock: name.clone(),
         rect,

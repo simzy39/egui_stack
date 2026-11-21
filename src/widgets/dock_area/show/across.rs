@@ -784,7 +784,8 @@ mod tests {
         let mut cloned = original.clone();
         let mut area = DockArea::new(&mut cloned);
         assert!(!area.drag_source_valid(source, &mut viewer));
-        assert!(area.drag_source_valid(area.group_drag_source(root).unwrap(), &mut viewer));
+        let fresh_source = area.group_drag_source(root).unwrap();
+        assert!(area.drag_source_valid(fresh_source, &mut viewer));
     }
 
     #[test]

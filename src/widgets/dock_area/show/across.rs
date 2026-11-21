@@ -821,7 +821,9 @@ mod tests {
     fn retained_empty_surface_drop_rejects_reused_slot() {
         let mut dock = DockState::new(vec!["source"]);
         let vacant = dock.add_window(vec!["old"]);
+        let untouched = dock.add_window(vec!["other"]);
         dock.remove_surface(vacant).unwrap();
+        assert!(dock.is_surface_valid(untouched));
         let mut area = DockArea::new(&mut dock);
         let original = area.dock_state.capture_surface_identity(vacant).unwrap();
         let destination = TabDestination::EmptySurface(vacant);

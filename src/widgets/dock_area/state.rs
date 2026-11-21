@@ -23,7 +23,7 @@ impl GroupPress {
     /// A different handle or a replacement leaf must never inherit this gesture.
     pub(super) fn matches(self, widget: Id, path: NodePath, leaf_id: u64) -> bool {
         self.widget == widget
-            && self.source == DragSource::Group { path, id: leaf_id }
+            && self.source == (DragSource::Group { path, id: leaf_id })
     }
 }
 

@@ -1168,6 +1168,8 @@ impl<Tab> DockSpace<Tab> {
                     && self.dock(&dock.name).is_some()
             })
         };
+        // Pending opens must not resurrect floats removed by the new layout.
+        floating.pending.retain(|pending| live_float(&pending.dock));
         floating.builders.retain(|name, _| live_float(name));
         floating.viewports.retain(|name, _| live_float(name));
         floating.placed.retain(|name, _| live_float(name));
@@ -1504,6 +1506,24 @@ mod detach_tests {
 
     fn id(tab: &mut &'static str) -> Id {
         Id::new(*tab)
+    }
+
+    #[test]
+    fn carried_pending_float_without_a_live_dock_is_discarded() {
+        let mut old = DockSpace::<&'static str>::new();
+        old.add_dock("editor", DockRules::default(), vec!["one"]);
+        old.floating.pending.push(crate::floats::PendingFloat {
+            dock: "float-1".to_owned(),
+            rect: float_rect(),
+            physical: None,
+            tabs: vec![Id::new("one")],
+            host: FloatHost::InWindow,
+        });
+        let mut replacement = DockSpace::<&'static str>::new();
+        replacement.add_dock("editor", DockRules::default(), vec!["one"]);
+        replacement.carry_floats_from(&mut old);
+        assert!(replacement.floating.pending.is_empty());
+        assert!(old.floating.pending.is_empty());
     }
 
     #[test]

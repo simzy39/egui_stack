@@ -67,7 +67,7 @@ pub(crate) struct Report {
     /// What a release does.
     pub(crate) outcome: Outcome,
     /// Runtime identity of a leaf destination, captured when this report was made.
-    /// None for split, empty-surface, window and non-drop outcomes.
+    /// None for container splits, empty surfaces, windows and non-drop outcomes.
     pub(crate) destination_identity: Option<u64>,
     /// The zone to unfold once the tab lands (a strip or a restore band of the main window).
     pub(crate) unfold: Option<ZoneName>,

@@ -266,14 +266,11 @@ impl<Tab> DockArea<'_, Tab> {
     ) {
         let viewport = ui.ctx().viewport_id();
         let destination_identity = match &outcome {
-            Outcome::Drop(TabDestination::Node(path, insert))
-                if !matches!(insert, TabInsert::Split(_)) =>
-            {
-                self.dock_state
-                    .leaf_mut(*path)
-                    .ok()
-                    .map(|leaf| leaf.ensure_drag_identity())
-            }
+            Outcome::Drop(TabDestination::Node(path, _)) => self
+                .dock_state
+                .leaf_mut(*path)
+                .ok()
+                .map(|leaf| leaf.ensure_drag_identity()),
             _ => None,
         };
         let Some(space) = self.space.as_mut() else {
@@ -477,9 +474,7 @@ impl<Tab> DockArea<'_, Tab> {
             return true;
         };
         match destination {
-            TabDestination::Node(path, insert)
-                if !matches!(insert, TabInsert::Split(_)) =>
-            {
+            TabDestination::Node(path, _) => {
                 identity != 0
                     && self
                         .dock_state
@@ -1738,17 +1733,29 @@ mod tests {
             .unwrap()
             .ensure_drag_identity();
 
-        assert!(area.reported_destination_identity_valid(
-            &TabDestination::Node(destination_path, TabInsert::Append),
-            Some(destination_identity),
-        ));
+        for insert in [
+            TabInsert::Append,
+            TabInsert::Insert(TabIndex(0)),
+            TabInsert::Split(crate::Split::Right),
+        ] {
+            assert!(area.reported_destination_identity_valid(
+                &TabDestination::Node(destination_path, insert),
+                Some(destination_identity),
+            ));
+        }
 
         *area.dock_state.main_surface_mut() = crate::Tree::new(vec!["replacement target"]);
 
-        assert!(!area.reported_destination_identity_valid(
-            &TabDestination::Node(destination_path, TabInsert::Append),
-            Some(destination_identity),
-        ));
+        for insert in [
+            TabInsert::Append,
+            TabInsert::Insert(TabIndex(0)),
+            TabInsert::Split(crate::Split::Right),
+        ] {
+            assert!(!area.reported_destination_identity_valid(
+                &TabDestination::Node(destination_path, insert),
+                Some(destination_identity),
+            ));
+        }
         assert!(area.reported_destination_identity_valid(
             &TabDestination::Node(destination_path, TabInsert::Append),
             None,

@@ -213,11 +213,22 @@ impl<Tab> DockArea<'_, Tab> {
         }
         // A handle of the body (`DockArea::drag_group_by`) asked to drag the group.
         let request = BodyLeaf::request_id(self.id);
-        if let Some((handle_path, handle_id)) = ui.data_mut(|d| d.remove_temp::<(NodePath, Id)>(request))
-            && handle_path == path
+        if let Some((Some(source), handle_id)) =
+            ui.data_mut(|d| d.remove_temp::<(Option<DragSource>, Id)>(request))
+            && source.component() == TreeComponent::Node(path)
             && self.draggable_tabs
         {
-            self.try_initiate_node_drag(ui, state, handle_id, path);
+            // A later drag request cannot target a replacement leaf or a
+            // different handle, even when the node path has been reused.
+            if let Some(press) = state.group_press
+                && press.widget == handle_id
+            {
+                if press.source == source {
+                    self.try_initiate_node_drag(ui, state, handle_id, path);
+                } else {
+                    self.cancel_tab_drag(ui, state);
+                }
+            }
         }
 
         let tabs = self.dock_state[path]

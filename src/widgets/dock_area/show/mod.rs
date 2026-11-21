@@ -171,6 +171,8 @@ impl<Tab> DockArea<'_, Tab> {
             }
         }
 
+        // Removal and group moves above can change a previously validated drag's source.
+        // Recheck immediately before executing the deferred float.
         for (source, rect, host, tab_id) in std::mem::take(&mut self.to_float) {
             let valid = if tab_id.is_some() {
                 self.drag_source_valid(&source, tab_id, tab_viewer)

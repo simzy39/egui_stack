@@ -52,7 +52,12 @@ impl<Tab> DockArea<'_, Tab> {
                 space.floating.session = None;
             }
             Self::idle(state);
+            // The local source is validated separately before entering across(); discard
+            // any preview from the invalid session even when this viewport is its target.
+            state.dnd = None;
+            state.window_fade = None;
             self.forget_verdicts();
+            ui.ctx().request_repaint();
         }
         let Some(space) = self.space.as_mut() else {
             return Across::Here;
@@ -384,7 +389,12 @@ impl<Tab> DockArea<'_, Tab> {
         path: TabPath,
         tab_viewer: &mut impl TabViewer<Tab = Tab>,
     ) -> Option<Id> {
-        let tab = self.dock_state.leaf_mut(path.node_path()).ok()?.tabs.get_mut(path.tab.0)?;
+        let tab = self
+            .dock_state
+            .leaf_mut(path.node_path())
+            .ok()?
+            .tabs
+            .get_mut(path.tab.0)?;
         Some(tab_viewer.id(tab))
     }
 

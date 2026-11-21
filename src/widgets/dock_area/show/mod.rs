@@ -180,13 +180,9 @@ impl<Tab> DockArea<'_, Tab> {
         // Removal and group moves above can change a previously validated drag's source.
         // Recheck immediately before executing the deferred float.
         for PendingFloat { source, rect, host } in std::mem::take(&mut self.to_float) {
-            let (source, tab_id) = match source {
-                DragSource::Tab { path, id } => (TreeComponent::Tab(path), Some(id)),
-                DragSource::Group(path) => (TreeComponent::Node(path), None),
-            };
-            let valid = self.drag_source_valid(&source, tab_id, tab_viewer);
+            let valid = self.drag_source_valid(source, tab_viewer);
             if valid {
-                self.float_out(ui.ctx(), source, rect, host, tab_viewer);
+                self.float_out(ui.ctx(), source.component(), rect, host, tab_viewer);
             }
         }
 
@@ -281,7 +277,7 @@ impl<Tab> DockArea<'_, Tab> {
 
         if drag_data
             .as_ref()
-            .is_some_and(|drag: &DragData| !self.drag_source_valid(&drag.source.component(), drag.source.tab_id(), tab_viewer))
+            .is_some_and(|drag: &DragData| !self.drag_source_valid(drag.source, tab_viewer))
         {
             if drag_data.as_ref().is_some_and(|drag| drag.source.tab_id().is_some()) {
                 self.cancel_tab_drag(ui, state);
@@ -305,7 +301,7 @@ impl<Tab> DockArea<'_, Tab> {
             self.forget_verdicts();
         }
         if state.dnd.as_ref().is_some_and(|dnd| {
-            !self.drag_source_valid(&dnd.drag.source.component(), dnd.drag.source.tab_id(), tab_viewer)
+            !self.drag_source_valid(dnd.drag.source, tab_viewer)
                 || !self.hover_valid(&dnd.hover)
         })
         {
@@ -340,7 +336,7 @@ impl<Tab> DockArea<'_, Tab> {
         };
         if drag_data
             .as_ref()
-            .is_some_and(|drag| !self.drag_source_valid(&drag.source.component(), drag.source.tab_id(), tab_viewer))
+            .is_some_and(|drag| !self.drag_source_valid(drag.source, tab_viewer))
         {
             drag_data = None;
             state.reset_drag();

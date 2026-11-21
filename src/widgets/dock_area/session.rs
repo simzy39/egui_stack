@@ -20,7 +20,7 @@ use std::collections::BTreeMap;
 
 use egui::{Pos2, Rect, ViewportId};
 
-use super::drag_and_drop::{DragSource, TreeComponent};
+use super::drag_and_drop::DragSource;
 use crate::layout::ZoneName;
 use crate::{NodePath, TabDestination, TabPath};
 
@@ -87,10 +87,9 @@ impl DragSession {
     /// A session for `src` dragged in `source`.
     /// Whether what is dragged is still in `state`, at the same place.
     pub(crate) fn source_in<Tab>(&self, state: &crate::DockState<Tab>) -> bool {
-        match self.payload.component() {
-            TreeComponent::Surface(surface) => state.get_surface(surface).is_some(),
-            TreeComponent::Node(path) => state.leaf(path).is_ok(),
-            TreeComponent::Tab(path) => state
+        match self.payload {
+            DragSource::Group(path) => state.leaf(path).is_ok(),
+            DragSource::Tab { path, .. } => state
                 .leaf(path.node_path())
                 .is_ok_and(|leaf| path.tab.0 < leaf.tabs.len()),
         }
@@ -134,10 +133,9 @@ impl DragSession {
 
     /// What is dragged, for [`DockSpace::dragging`](crate::DockSpace::dragging).
     pub(crate) fn dragged(&self) -> Option<SpaceDrag> {
-        let payload = match self.payload.component() {
-            TreeComponent::Tab(path) => DragPayload::Tab(path),
-            TreeComponent::Node(path) => DragPayload::Group(path),
-            TreeComponent::Surface(_) => return None,
+        let payload = match self.payload {
+            DragSource::Tab { path, .. } => DragPayload::Tab(path),
+            DragSource::Group(path) => DragPayload::Group(path),
         };
         let over = self
             .reports

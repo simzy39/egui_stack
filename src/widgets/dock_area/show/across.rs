@@ -45,9 +45,9 @@ impl<Tab> DockArea<'_, Tab> {
             .space
             .as_ref()
             .and_then(|space| space.floating.session.as_ref())
-            .map(|session| (session.payload.component(), session.payload.tab_id()));
+            .map(|session| session.payload);
         if session_source
-            .is_some_and(|(src, tab_id)| !self.drag_source_valid(&src, tab_id, tab_viewer))
+            .is_some_and(|source| !self.drag_source_valid(source, tab_viewer))
         {
             if let Some(space) = self.space.as_mut() {
                 space.floating.session = None;
@@ -303,7 +303,7 @@ impl<Tab> DockArea<'_, Tab> {
         tab_id: Option<Id>,
         tab_viewer: &mut impl TabViewer<Tab = Tab>,
     ) {
-        if !self.drag_source_valid(&src, tab_id, tab_viewer) {
+        if !DragSource::from_parts(src.clone(), tab_id).is_some_and(|source| self.drag_source_valid(source, tab_viewer)) {
             return;
         }
         match report.outcome {
@@ -360,7 +360,7 @@ impl<Tab> DockArea<'_, Tab> {
         tab_id: Option<Id>,
         tab_viewer: &mut impl TabViewer<Tab = Tab>,
     ) {
-        if !self.floats_on() || !self.drag_source_valid(&src, tab_id, tab_viewer) {
+        if !self.floats_on() || !DragSource::from_parts(src.clone(), tab_id).is_some_and(|source| self.drag_source_valid(source, tab_viewer)) {
             return;
         }
         let may = match src {
@@ -402,15 +402,12 @@ impl<Tab> DockArea<'_, Tab> {
     /// A retained drag must still refer to its original tab, not just a valid slot.
     pub(super) fn drag_source_valid(
         &mut self,
-        src: &TreeComponent,
-        tab_id: Option<Id>,
+        source: DragSource,
         tab_viewer: &mut impl TabViewer<Tab = Tab>,
     ) -> bool {
-        match *src {
-            TreeComponent::Tab(path) => {
-                tab_id.is_some() && self.tab_identity(path, tab_viewer) == tab_id
-            }
-            _ => self.source_valid(src),
+        match source {
+            DragSource::Tab { path, id } => self.tab_identity(path, tab_viewer) == Some(id),
+            DragSource::Group(path) => self.source_valid(&TreeComponent::Node(path)),
         }
     }
 

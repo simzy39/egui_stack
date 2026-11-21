@@ -2327,7 +2327,7 @@ impl<Tab> DockArea<'_, Tab> {
                     drag: DragData { source, .. },
                     ..
                 }) => {
-                    self.drag_source_valid(&source.component(), source.tab_id(), tab_viewer)
+                    self.drag_source_valid(*source, tab_viewer)
                         && match source.component() {
                             TreeComponent::Tab(src_path) => {
                                 !self.dock_state.is_window(path.surface)

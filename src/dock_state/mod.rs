@@ -489,6 +489,9 @@ impl<Tab> DockState<Tab> {
         if !self.valid_move_destination(&destination) || self.tab_move_is_noop(src, &destination) {
             return false;
         }
+        // Splitting the root relocates its old leaf to a newly allocated node.
+        // Track that relocation so cleanup never targets the new container.
+        let mut cleanup_source = src.node_path();
         match destination {
             TabDestination::Window(position) => {
                 return self.detach_tab(src, position).is_some();
@@ -498,7 +501,11 @@ impl<Tab> DockState<Tab> {
                 let tab = self[src.node_path()].remove_tab(src.tab).unwrap();
                 match dst_tab {
                     TabInsert::Split(split) => {
-                        self[dst.surface].split(dst.node, split, 0.5, Node::leaf(tab));
+                        let [old_node, _new_node] =
+                            self[dst.surface].split(dst.node, split, 0.5, Node::leaf(tab));
+                        if dst == cleanup_source {
+                            cleanup_source.node = old_node;
+                        }
                     }
                     TabInsert::Insert(index) => {
                         // Insertion indices describe the destination before removal.
@@ -519,7 +526,7 @@ impl<Tab> DockState<Tab> {
                 self[dst_surface] = Tree::new(vec![tab])
             }
         }
-        self.cleanup_moved_source(src.node_path());
+        self.cleanup_moved_source(cleanup_source);
         true
     }
 
@@ -1213,6 +1220,27 @@ mod test {
         let leaf = dock.leaf(moved).unwrap();
         assert_eq!(leaf.tabs, ["first", "second"]);
         assert_eq!(leaf.active, TabIndex(1));
+    }
+
+    #[test]
+    fn splitting_single_tab_root_removes_relocated_empty_source() {
+        let mut dock = DockState::new(vec!["only"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let source = TabPath::new(SurfaceIndex::main(), NodeIndex::root(), TabIndex(0));
+        assert!(!dock.move_tab(
+            source,
+            TabDestination::Node(root, TabInsert::Split(crate::Split::Right)),
+        ));
+        assert_eq!(dock.leaf(root).unwrap().tabs, ["only"]);
+
+        let mut dock = DockState::new(vec!["first", "second"]);
+        assert!(dock.move_tab(
+            source,
+            TabDestination::Node(root, TabInsert::Split(crate::Split::Right)),
+        ));
+        for name in ["first", "second"] {
+            assert!(dock.find_tab(&name).is_some());
+        }
     }
 
     #[test]

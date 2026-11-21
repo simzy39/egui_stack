@@ -787,6 +787,30 @@ mod tests {
     }
 
     #[test]
+    fn cross_viewport_session_rejects_replaced_group_before_release() {
+        let mut dock = DockState::new(vec!["original"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let mut viewer = Viewer { allow_windows: true };
+        let mut area = DockArea::new(&mut dock);
+        let source = area.group_drag_source(root).unwrap();
+        let rect = Rect::from_min_size(Pos2::ZERO, egui::vec2(200.0, 100.0));
+        let session = DragSession::new(source, rect, egui::ViewportId::ROOT, Pos2::ZERO);
+        assert!(session.source_in(area.dock_state));
+        assert!(area.drag_source_valid(session.payload, &mut viewer));
+
+        // A remote viewport can still hold a report, but its source is gone.
+        *area.dock_state.main_surface_mut() = crate::Tree::new(vec!["replacement"]);
+        assert!(!session.source_in(area.dock_state));
+        assert!(!area.drag_source_valid(session.payload, &mut viewer));
+        assert!(!area.apply_move(
+            session.payload,
+            TabDestination::Node(root, TabInsert::Append),
+            &mut viewer,
+        ));
+        assert_eq!(area.dock_state[root].tabs().unwrap(), &["replacement"]);
+    }
+
+    #[test]
     fn group_identity_rejects_a_leaf_relocated_to_another_path() {
         let mut dock = DockState::new(vec!["original"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());

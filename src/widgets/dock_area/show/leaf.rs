@@ -2476,7 +2476,6 @@ impl<Tab> DockArea<'_, Tab> {
                         let outer = ui.data_mut(|d| {
                             let body = BodyLeaf {
                                 dock_area: self.id,
-                                path,
                                 source,
                             };
                             let outer = d.get_temp::<Option<BodyLeaf>>(BodyLeaf::id()).flatten();

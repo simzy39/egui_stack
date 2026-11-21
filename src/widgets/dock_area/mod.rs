@@ -228,7 +228,6 @@ impl DockArea<'_, ()> {
 #[derive(Clone, Copy)]
 struct BodyLeaf {
     dock_area: Id,
-    path: NodePath,
     source: Option<DragSource>,
 }
 

@@ -18,9 +18,9 @@
 
 use std::collections::BTreeMap;
 
-use egui::{Id, Pos2, Rect, ViewportId};
+use egui::{Pos2, Rect, ViewportId};
 
-use super::drag_and_drop::TreeComponent;
+use super::drag_and_drop::{DragSource, TreeComponent};
 use crate::layout::ZoneName;
 use crate::{NodePath, TabDestination, TabPath};
 
@@ -33,9 +33,7 @@ pub(crate) const RELEASED_PASSES: u8 = 12;
 #[derive(Clone, Debug)]
 pub(crate) struct DragSession {
     /// What is dragged: a tab, or a whole group (a leaf).
-    pub(crate) src: TreeComponent,
-    /// The original tab's viewer ID, for single-tab drags.
-    pub(crate) tab_id: Option<Id>,
+    pub(crate) payload: DragSource,
     /// The dragged leaf's rect in the source, whose size a new float takes.
     pub(crate) rect: Rect,
     /// The viewport the drag began in.
@@ -89,7 +87,7 @@ impl DragSession {
     /// A session for `src` dragged in `source`.
     /// Whether what is dragged is still in `state`, at the same place.
     pub(crate) fn source_in<Tab>(&self, state: &crate::DockState<Tab>) -> bool {
-        match self.src {
+        match self.payload.component() {
             TreeComponent::Surface(surface) => state.get_surface(surface).is_some(),
             TreeComponent::Node(path) => state.leaf(path).is_ok(),
             TreeComponent::Tab(path) => state
@@ -99,16 +97,14 @@ impl DragSession {
     }
 
     pub(crate) fn new(
-        src: TreeComponent,
+        payload: DragSource,
         rect: Rect,
-        tab_id: Option<Id>,
         source: ViewportId,
         local: Pos2,
     ) -> Self {
         Self {
-            src,
+            payload,
             rect,
-            tab_id,
             source,
             local,
             desktop: None,
@@ -138,7 +134,7 @@ impl DragSession {
 
     /// What is dragged, for [`DockSpace::dragging`](crate::DockSpace::dragging).
     pub(crate) fn dragged(&self) -> Option<SpaceDrag> {
-        let payload = match self.src {
+        let payload = match self.payload.component() {
             TreeComponent::Tab(path) => DragPayload::Tab(path),
             TreeComponent::Node(path) => DragPayload::Group(path),
             TreeComponent::Surface(_) => return None,

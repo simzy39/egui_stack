@@ -59,10 +59,8 @@ impl HoverData {
 
 #[derive(Debug, Clone)]
 pub(crate) struct DragData {
-    pub src: TreeComponent,
+    pub source: DragSource,
     pub rect: Rect,
-    /// The original tab's viewer ID; whole-group drags have no tab identity.
-    pub tab_id: Option<Id>,
 }
 
 /// A retained source has a mandatory logical identity for tabs. Group paths
@@ -74,6 +72,20 @@ pub(crate) enum DragSource {
 }
 
 impl DragSource {
+    pub(crate) fn component(self) -> TreeComponent {
+        match self {
+            Self::Tab { path, .. } => TreeComponent::Tab(path),
+            Self::Group(path) => TreeComponent::Node(path),
+        }
+    }
+
+    pub(crate) fn tab_id(self) -> Option<Id> {
+        match self {
+            Self::Tab { id, .. } => Some(id),
+            Self::Group(_) => None,
+        }
+    }
+
     pub(crate) fn from_parts(source: TreeComponent, tab_id: Option<Id>) -> Option<Self> {
         match source {
             TreeComponent::Tab(path) => Some(Self::Tab { path, id: tab_id? }),
@@ -659,9 +671,8 @@ mod tests {
                         outside: false,
                     },
                     drag: DragData {
-                        src: TreeComponent::Node(source),
+                        source: DragSource::Group(source),
                         rect,
-                        tab_id: None,
                     },
                     pointer: center + offset,
                     locked: None,
@@ -717,12 +728,11 @@ mod tests {
                             outside: false,
                         },
                         drag: DragData {
-                            src: TreeComponent::Node(NodePath::new(
+                            source: DragSource::Group(NodePath::new(
                                 SurfaceIndex::main(),
                                 NodeIndex(2),
                             )),
                             rect,
-                            tab_id: None,
                         },
                         pointer: rect.center(),
                         locked: None,

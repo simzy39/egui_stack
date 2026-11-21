@@ -281,9 +281,9 @@ impl<Tab> DockArea<'_, Tab> {
 
         if drag_data
             .as_ref()
-            .is_some_and(|drag: &DragData| !self.drag_source_valid(&drag.src, drag.tab_id, tab_viewer))
+            .is_some_and(|drag: &DragData| !self.drag_source_valid(&drag.source.component(), drag.source.tab_id(), tab_viewer))
         {
-            if drag_data.as_ref().is_some_and(|drag| drag.tab_id.is_some()) {
+            if drag_data.as_ref().is_some_and(|drag| drag.source.tab_id().is_some()) {
                 self.cancel_tab_drag(ui, state);
             }
             drag_data = None;
@@ -305,7 +305,7 @@ impl<Tab> DockArea<'_, Tab> {
             self.forget_verdicts();
         }
         if state.dnd.as_ref().is_some_and(|dnd| {
-            !self.drag_source_valid(&dnd.drag.src, dnd.drag.tab_id, tab_viewer)
+            !self.drag_source_valid(&dnd.drag.source.component(), dnd.drag.source.tab_id(), tab_viewer)
                 || !self.hover_valid(&dnd.hover)
         })
         {
@@ -318,7 +318,7 @@ impl<Tab> DockArea<'_, Tab> {
         // viewport, so it stays out of its bar.
         let in_air = match &drag_data {
             Some(DragData {
-                src: TreeComponent::Tab(path),
+                source: DragSource::Tab { path, .. },
                 ..
             }) => Some(*path),
             _ => None,
@@ -340,7 +340,7 @@ impl<Tab> DockArea<'_, Tab> {
         };
         if drag_data
             .as_ref()
-            .is_some_and(|drag| !self.drag_source_valid(&drag.src, drag.tab_id, tab_viewer))
+            .is_some_and(|drag| !self.drag_source_valid(&drag.source.component(), drag.source.tab_id(), tab_viewer))
         {
             drag_data = None;
             state.reset_drag();
@@ -356,11 +356,11 @@ impl<Tab> DockArea<'_, Tab> {
         // the pointer is over: the source's, or another's of the space.
         let ghost = match &drag_data {
             Some(DragData {
-                src: TreeComponent::Node(path),
+                source: DragSource::Group(path),
                 ..
             }) => Some((*path, None)),
             Some(DragData {
-                src: TreeComponent::Tab(path),
+                source: DragSource::Tab { path, .. },
                 ..
             }) => Some((path.node_path(), Some(path.tab))),
             _ => None,
@@ -459,8 +459,8 @@ impl<Tab> DockArea<'_, Tab> {
                     space.no_drop.unfolds.push(zone);
                 }
                 let drag = &state.dnd.as_ref().unwrap().drag;
-                let source = drag.src.clone();
-                let tab_id = drag.tab_id;
+                let source = drag.source.component();
+                let tab_id = drag.source.tab_id();
                 match destination {
                     // Out of every dock, once the space's floats are drawn: a float.
                     TabDestination::Window(rect) if self.floats_on() => {
@@ -832,7 +832,7 @@ impl<Tab> DockArea<'_, Tab> {
         rect: Rect,
     ) -> Option<TabDestination> {
         let drag_state = state.dnd.as_mut().unwrap();
-        let (src_surface, src_node) = drag_state.drag.src.node_address();
+        let (src_surface, src_node) = drag_state.drag.source.component().node_address();
         drag_state.src_in_window = self.dock_state.is_window(src_surface);
         let destination = drag_state.hover.dst.as_tab_destination();
         if (src_surface, src_node) == drag_state.hover.dst.node_address() {
@@ -874,7 +874,7 @@ impl<Tab> DockArea<'_, Tab> {
         fresh: bool,
     ) -> Option<Option<egui::WidgetText>> {
         let drag_state = state.dnd.as_ref()?;
-        self.refusal_of(&drag_state.drag.src, tab_viewer, destination, fresh)
+        self.refusal_of(&drag_state.drag.source.component(), tab_viewer, destination, fresh)
     }
 
     /// The veto for `src`, a tab or a whole leaf, at `destination`; see
@@ -1059,7 +1059,7 @@ impl<Tab> DockArea<'_, Tab> {
 
         let deserted_node = {
             match (
-                drag_state.drag.src.node_address(),
+                drag_state.drag.source.component().node_address(),
                 drag_state.hover.dst.node_address(),
             ) {
                 ((src_surf, Some(src_node)), (dst_surf, Some(dst_node))) => {
@@ -1078,7 +1078,7 @@ impl<Tab> DockArea<'_, Tab> {
             AllowedSplits::All
         };
         let (src_surface, dst_surface) = (
-            drag_state.drag.src.surface_address(),
+            drag_state.drag.source.component().surface_address(),
             drag_state.hover.dst.surface_address(),
         );
         // The dock under the pointer may refuse splits.
@@ -1091,13 +1091,13 @@ impl<Tab> DockArea<'_, Tab> {
         let allowed_splits = self.allowed_splits & restricted_splits & dock_splits;
 
         // A whole leaf dragged onto itself goes nowhere.
-        if let TreeComponent::Node(src) = drag_state.drag.src
+        if let TreeComponent::Node(src) = drag_state.drag.source.component()
             && !drag_state.hover.outside
             && drag_state.hover.dst.node_address() == (src.surface, Some(src.node))
         {
             return None;
         }
-        let allowed_in_window = match drag_state.drag.src {
+        let allowed_in_window = match drag_state.drag.source.component() {
             TreeComponent::Tab(path) => self.may_float(path, tab_viewer),
             TreeComponent::Node(path) => self.node_may_float(path, tab_viewer),
             TreeComponent::Surface(_) => unreachable!("surfaces can't be dragged (yet)"),

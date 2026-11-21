@@ -15,7 +15,7 @@ use crate::{
     TabBarGripPaint, TabBarPaint, TabBarTailPaint, TabBodyPaint, TabClose, TabDestination,
     TabFocus, TabIndex, TabInsert, TabMeasure, TabPaint, TabStyle, TabViewer,
     dock_area::{
-        drag_and_drop::{DragData, DragDropState, HoverData, TreeComponent},
+        drag_and_drop::{DragSource, DragData, DragDropState, HoverData, TreeComponent},
         state::{State, TabPress},
     },
     utils::{fade_visuals, rect_set_size_centered},
@@ -1831,9 +1831,8 @@ impl<Tab> DockArea<'_, Tab> {
                 mem.data.insert_temp(
                     self.id.with("drag_data"),
                     Some(DragData {
-                        src: TreeComponent::Node(path),
+                        source: DragSource::Group(path),
                         rect: self.dock_state[path].rect().unwrap(),
-                        tab_id: None,
                     }),
                 );
             });
@@ -1903,9 +1902,8 @@ impl<Tab> DockArea<'_, Tab> {
             mem.data.insert_temp(
                 self.id.with("drag_data"),
                 Some(DragData {
-                    src: TreeComponent::Tab(path),
+                    source: DragSource::Tab { path, id: press.tab_id },
                     rect: self.dock_state[path.node_path()].rect().unwrap(),
-                    tab_id: Some(press.tab_id),
                 }),
             );
         });
@@ -2326,11 +2324,11 @@ impl<Tab> DockArea<'_, Tab> {
             // it's unnecessary to change the hover state
             let is_dragged_valid = match &state.dnd {
                 Some(DragDropState {
-                    drag: DragData { src, tab_id, .. },
+                    drag: DragData { source, .. },
                     ..
                 }) => {
-                    self.drag_source_valid(src, *tab_id, tab_viewer)
-                        && match *src {
+                    self.drag_source_valid(&source.component(), source.tab_id(), tab_viewer)
+                        && match source.component() {
                             TreeComponent::Tab(src_path) => {
                                 !self.dock_state.is_window(path.surface)
                                     || self.may_float(src_path, tab_viewer)

@@ -4,7 +4,7 @@
 use egui::{Id, Key, Pos2, Rect, Ui};
 
 use super::super::{
-    drag_and_drop::{DragData, TreeComponent, make_overlay_painter},
+    drag_and_drop::{DragSource, DragData, TreeComponent, make_overlay_painter},
     session::{DragSession, Outcome, RELEASED_PASSES, Report},
     state::State,
     PendingFloat,
@@ -45,7 +45,7 @@ impl<Tab> DockArea<'_, Tab> {
             .space
             .as_ref()
             .and_then(|space| space.floating.session.as_ref())
-            .map(|session| (session.src.clone(), session.tab_id));
+            .map(|session| (session.payload.component(), session.payload.tab_id()));
         if session_source
             .is_some_and(|(src, tab_id)| !self.drag_source_valid(&src, tab_id, tab_viewer))
         {
@@ -92,16 +92,14 @@ impl<Tab> DockArea<'_, Tab> {
             let session = match &mut space.floating.session {
                 Some(session)
                     if session.source == viewport
-                        && session.src == drag.src
-                        && session.tab_id == drag.tab_id
+                        && session.payload == drag.source
                         && session.released.is_none() =>
                 {
                     session
                 }
                 slot => slot.insert(DragSession::new(
-                    drag.src.clone(),
+                    drag.source,
                     drag.rect,
-                    drag.tab_id,
                     viewport,
                     local,
                 )),
@@ -129,7 +127,7 @@ impl<Tab> DockArea<'_, Tab> {
                 }
                 return Across::Here;
             }
-            let (src, size, tab_id) = (session.src.clone(), session.rect.size(), session.tab_id);
+            let (src, size, tab_id) = (session.payload.component(), session.rect.size(), session.payload.tab_id());
             // Released outside, where no viewport could tell the pointer was over it: the first
             // that sees it over one of its docks within a few passes takes it.
             let wait = remote.is_none() && session.outside && session.desktop.is_none() && others;
@@ -164,9 +162,9 @@ impl<Tab> DockArea<'_, Tab> {
                 Some(0) => {
                     // Nobody took it: as over nothing, a new float.
                     let (src, rect, tab_id) = (
-                        session.src.clone(),
+                        session.payload.component(),
                         Rect::from_min_size(session.local, session.rect.size()),
-                        session.tab_id,
+                        session.payload.tab_id(),
                     );
                     space.floating.session = None;
                     self.release_free(src, rect, tab_id, tab_viewer);
@@ -206,7 +204,7 @@ impl<Tab> DockArea<'_, Tab> {
             // docks once the pointer leaves the drag's window.
             let outline =
                 session.desktop.is_none() && session.outside && session.released.is_none();
-            let src = session.src.clone();
+            let src = session.payload.component();
             Self::idle(state);
             if outline {
                 self.paint_outlines(ui, &src, tab_viewer);
@@ -215,15 +213,15 @@ impl<Tab> DockArea<'_, Tab> {
             return Across::Done;
         };
         let (src, rect, tab_id, take) = (
-            session.src.clone(),
+            session.payload.component(),
             session.rect,
-            session.tab_id,
+            session.payload.tab_id(),
             session.released.is_some(),
         );
         state.remote = true;
         state.last_hover_pos = Some(pointer);
         state.drag_start.get_or_insert(pointer);
-        *drag_data = Some(DragData { src, rect, tab_id });
+        *drag_data = DragSource::from_parts(src, tab_id).map(|source| DragData { source, rect });
         ctx.request_repaint();
         Across::Remote { take }
     }
@@ -276,7 +274,7 @@ impl<Tab> DockArea<'_, Tab> {
             );
             return;
         }
-        let (src, rect, tab_id) = (session.src.clone(), session.rect, session.tab_id);
+        let (src, rect, tab_id) = (session.payload.component(), session.rect, session.payload.tab_id());
         match outcome {
             // Over none of its docks: another viewport may still take it.
             Outcome::Free => return,

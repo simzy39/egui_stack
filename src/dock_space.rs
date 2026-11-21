@@ -456,11 +456,17 @@ impl<Tab> DockSpace<Tab> {
     /// Removes the dock named `name` from the space, and returns its tree.
     pub fn remove_dock(&mut self, name: &str) -> Option<Tree<Tab>> {
         let index = self.dock_index(name)?;
-        let dock = self.docks.remove(index);
-        match self.state.take_surface(dock.surface)? {
-            Surface::Main(tree) => Some(tree),
-            _ => None,
+        let surface = self.docks[index].surface;
+        // A missing or non-docked surface is not a removable dock. Do not
+        // unregister its name until the corresponding tree is available.
+        if !matches!(self.state.get_surface(surface), Some(Surface::Main(_))) {
+            return None;
         }
+        let Surface::Main(tree) = self.state.take_surface(surface)? else {
+            unreachable!("validated dock surface changed without mutation");
+        };
+        self.docks.remove(index);
+        Some(tree)
     }
 
     /// Whether the space has a dock named `name`.
@@ -1470,6 +1476,37 @@ mod detach_tests {
 
     fn id(tab: &mut &'static str) -> Id {
         Id::new(*tab)
+    }
+
+    #[test]
+    fn removing_dock_with_missing_surface_does_not_lose_registration() {
+        let mut space = DockSpace::new();
+        let surface = space.add_dock("editor", DockRules::default(), vec!["one"]);
+        space.state.take_surface(surface).unwrap();
+        assert!(space.remove_dock("editor").is_none());
+        assert_eq!(space.dock_surface("editor"), Some(surface));
+        assert_eq!(space.docks.len(), 1);
+    }
+
+    #[test]
+    fn restore_with_missing_origin_dock_uses_remaining_dock() {
+        let mut space = DockSpace::new();
+        space.add_dock("original", DockRules::default(), vec!["first", "second"]);
+        space.add_dock("fallback", DockRules::default(), vec!["existing"]);
+        let (tab, place) = space.take_with_place(Id::new("first"), id).unwrap();
+        assert_eq!(tab, "first");
+        space.remove_dock("original").unwrap();
+        assert_eq!(space.restore_at(tab, place, id).unwrap(), "fallback");
+        assert!(space.dock("fallback").unwrap().find_tab(&"first").is_some());
+    }
+
+    #[test]
+    fn restore_without_any_dock_returns_tab_to_caller() {
+        let mut space = DockSpace::new();
+        space.add_dock("original", DockRules::default(), vec!["first"]);
+        let (tab, place) = space.take_with_place(Id::new("first"), id).unwrap();
+        space.remove_dock("original").unwrap();
+        assert_eq!(space.restore_at(tab, place, id), Err("first"));
     }
 
     #[test]

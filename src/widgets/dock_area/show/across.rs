@@ -801,6 +801,43 @@ mod tests {
         let origin = space.origin(Id::unique("first")).expect("successful move records origin");
         assert_eq!(origin.dock, "main");
         assert_eq!(origin.after, Some(Id::unique("second")));
+
+        // A rejected return must not erase the saved origin.
+        let float_path = TabPath::new(float_surface, NodeIndex::root(), TabIndex(1));
+        {
+            let mut area = DockArea::dock(&mut space, "main");
+            let source = DragSource::Tab {
+                path: float_path,
+                id: area.tab_identity(float_path, &mut viewer).unwrap(),
+            };
+            assert!(!area.apply_move(
+                source,
+                TabDestination::Node(
+                    NodePath::new(main, NodeIndex(999)),
+                    TabInsert::Append,
+                ),
+                &mut viewer,
+            ));
+        }
+        assert!(space.origin(Id::unique("first")).is_some());
+
+        // Returning the tab to its original dock removes its restoration record.
+        {
+            let mut area = DockArea::dock(&mut space, "main");
+            let source = DragSource::Tab {
+                path: float_path,
+                id: area.tab_identity(float_path, &mut viewer).unwrap(),
+            };
+            assert!(area.apply_move(
+                source,
+                TabDestination::Node(
+                    NodePath::new(main, NodeIndex::root()),
+                    TabInsert::Append,
+                ),
+                &mut viewer,
+            ));
+        }
+        assert!(space.origin(Id::unique("first")).is_none());
     }
 
     #[test]

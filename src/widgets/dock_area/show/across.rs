@@ -842,8 +842,12 @@ mod tests {
             },
         ]);
         assert!(ctx.input(|i| i.pointer.primary_down()));
+        assert!(ctx.input(|i| i.pointer.primary_pressed()));
         frame(vec![Event::PointerMoved(pos2(100.0, 40.0))]);
         assert!(ctx.input(|i| i.pointer.primary_down()));
+        // Ownership may only be captured on the first frame, not merely
+        // because the pointer remains held during a later layout change.
+        assert!(!ctx.input(|i| i.pointer.primary_pressed()));
 
         // Application code replaces the leaf while the pointer remains held.
         *dock.main_surface_mut() = crate::Tree::new(vec!["replacement"]);

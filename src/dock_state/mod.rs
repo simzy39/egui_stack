@@ -1489,6 +1489,42 @@ mod test {
     }
 
     #[test]
+    fn moving_nested_leaf_beside_root_preserves_other_subtrees() {
+        let mut dock = DockState::new(vec!["a"]);
+        let main = SurfaceIndex::main();
+        let [_left, right] = dock
+            .main_surface_mut()
+            .split_right(NodeIndex::root(), 0.5, vec!["b", "c"]);
+        let source = NodePath::new(main, right);
+        let root = NodePath::MAIN_ROOT;
+        assert!(dock.move_node(
+            source,
+            TabDestination::Node(root, TabInsert::Split(Split::Below)),
+        ));
+        assert_eq!(dock.iter_all_tabs().count(), 3);
+        for name in ["a", "b", "c"] {
+            assert!(dock.find_tab(&name).is_some());
+        }
+    }
+
+    #[test]
+    fn moving_nested_tab_beside_root_preserves_other_subtrees() {
+        let mut dock = DockState::new(vec!["a"]);
+        let main = SurfaceIndex::main();
+        let [_left, right] = dock
+            .main_surface_mut()
+            .split_right(NodeIndex::root(), 0.5, vec!["b", "c"]);
+        assert!(dock.move_tab(
+            TabPath::new(main, right, TabIndex(0)),
+            TabDestination::Node(NodePath::MAIN_ROOT, TabInsert::Split(Split::Below)),
+        ));
+        assert_eq!(dock.iter_all_tabs().count(), 3);
+        for name in ["a", "b", "c"] {
+            assert!(dock.find_tab(&name).is_some());
+        }
+    }
+
+    #[test]
     fn moving_last_tab_across_surfaces_removes_empty_source_window() {
         let mut dock = DockState::new(vec!["main"]);
         let source_surface = dock.add_window(vec!["moving"]);

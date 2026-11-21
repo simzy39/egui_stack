@@ -200,8 +200,9 @@ impl<Tab> DockArea<'_, Tab> {
         }
 
         if !ui.input(|i| i.pointer.primary_down()) {
-            state.group_press = None;
-            state.tab_press = None;
+            // A click which never became a drag still ends the gesture. In
+            // particular, do not carry its modifier choice into the next press.
+            state.finish_drag();
             state.tab_drag_cancelled = false;
         }
         state.store(ui.ctx(), self.id);

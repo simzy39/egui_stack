@@ -207,7 +207,7 @@ impl DockArea<'_, ()> {
         let dragged = response.dragged() && ui.input(|i| i.pointer.is_decidedly_dragging());
         if dragged {
             ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::Grabbing);
-            ui.data_mut(|d| d.insert_temp(BodyLeaf::request_id(body.dock_area), (body.path, response.id)));
+            ui.data_mut(|d| d.insert_temp(BodyLeaf::request_id(body.dock_area), (body.source, response.id)));
         } else if response.hovered() && ui.ctx().dragged_id().is_none() {
             ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::Grab);
         }

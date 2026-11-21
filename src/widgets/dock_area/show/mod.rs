@@ -290,12 +290,9 @@ impl<Tab> DockArea<'_, Tab> {
             .as_ref()
             .is_some_and(|drag: &DragData| !self.drag_source_valid(drag.source, tab_viewer))
         {
-            if drag_data
-                .as_ref()
-                .is_some_and(|drag| matches!(drag.source, DragSource::Tab { .. }))
-            {
-                self.cancel_tab_drag(ui, state);
-            }
+            // A stale group must be suppressed just like a stale tab: otherwise
+            // another handle could capture a replacement source before release.
+            self.cancel_tab_drag(ui, state);
             drag_data = None;
             if let Some(space) = self.space.as_mut()
                 && space

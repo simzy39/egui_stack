@@ -115,3 +115,47 @@ impl State {
             .is_some_and(|drag_drop_state| drag_drop_state.is_locked(style, ctx))
     }
 }
+
+#[cfg(test)]
+mod retained_source_tests {
+    use super::*;
+
+    #[test]
+    fn finishing_a_drag_clears_both_sources_and_modifier_mode() {
+        let mut state = State {
+            group_press: Some(DragSource::Group {
+                path: NodePath::new(SurfaceIndex::main(), crate::NodeIndex::root()),
+                id: 42,
+            }),
+            drag_carries_group: Some(true),
+            drag_start: Some(Pos2::ZERO),
+            ..State::default()
+        };
+        state.finish_drag();
+        assert!(state.group_press.is_none());
+        assert!(state.tab_press.is_none());
+        assert!(state.drag_carries_group.is_none());
+        assert!(state.drag_start.is_none());
+    }
+
+    #[test]
+    fn finishing_a_tab_drag_clears_the_original_tab_press() {
+        let mut state = State {
+            tab_press: Some(TabPress {
+                widget: Id::new("handle"),
+                path: TabPath::new(
+                    SurfaceIndex::main(),
+                    crate::NodeIndex::root(),
+                    crate::TabIndex(0),
+                ),
+                tab_id: Id::new("tab"),
+            }),
+            drag_carries_group: Some(false),
+            ..State::default()
+        };
+        state.finish_drag();
+        assert!(state.tab_press.is_none());
+        assert!(state.group_press.is_none());
+        assert!(state.drag_carries_group.is_none());
+    }
+}

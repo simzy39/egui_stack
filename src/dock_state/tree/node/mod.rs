@@ -437,6 +437,7 @@ impl<Tab> Node<Tab> {
                     scroll,
                     collapsed,
                     tab_bar_hidden,
+                    ..
                 } = leaf;
                 let tabs: Vec<_> = tabs.iter().filter_map(function).collect();
                 if tabs.is_empty() {
@@ -450,6 +451,7 @@ impl<Tab> Node<Tab> {
                         scroll: *scroll,
                         collapsed: *collapsed,
                         tab_bar_hidden: *tab_bar_hidden,
+                        drag_identity: 0,
                     })
                 }
             }

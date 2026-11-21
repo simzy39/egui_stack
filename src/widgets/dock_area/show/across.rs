@@ -1009,11 +1009,7 @@ mod tests {
         let mut viewer = Viewer { allow_windows: true };
         let mut area = DockArea::new(&mut dock);
         let source = area.group_drag_source(source_path).unwrap();
-        let target_identity = area
-            .dock_state
-            .leaf_mut(target_path)
-            .unwrap()
-            .ensure_drag_identity();
+        let target_identity = area.capture_destination_identity(target_path).unwrap();
 
         // Replacing the leaf preserves its positional path, but must not inherit
         // the identity captured by the other viewport's drop report.

@@ -1159,7 +1159,26 @@ impl<Tab> DockSpace<Tab> {
         {
             floating.session = None;
         }
+        // Floating metadata keyed by a dock name is only meaningful when the
+        // replacement space still owns that floating dock.
+        let live_float = |name: &str| {
+            self.docks.iter().any(|dock| {
+                dock.floating
+                    && dock.name == name
+                    && self.dock(&dock.name).is_some()
+            })
+        };
+        floating.builders.retain(|name, _| live_float(name));
+        floating.viewports.retain(|name, _| live_float(name));
+        floating.placed.retain(|name, _| live_float(name));
+        floating.moving.retain(|name| live_float(name));
+        floating.chrome.retain(|name, _| live_float(name));
+        floating.collapsed.retain(|name| live_float(name));
+        floating.close_asked.retain(|name| live_float(name));
+        floating.released_at.retain(|name, _| live_float(name));
         self.floating = floating;
+        // The replacement layout's origins take precedence, including when
+        // the previous space has multiple stale entries for the same tab.
         for origin in std::mem::take(&mut old.origins) {
             if !self.origins.iter().any(|kept| kept.tab == origin.tab) {
                 self.origins.push(origin);

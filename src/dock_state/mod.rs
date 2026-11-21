@@ -1392,6 +1392,26 @@ mod test {
         assert_eq!(original.current_surface_identity(extra), Some(extra_id));
     }
 
+    #[cfg(feature = "serde")]
+    #[test]
+    fn serialized_surface_slots_exclude_runtime_identity() {
+        let mut dock = DockState::new(vec!["main"]);
+        let other = dock.add_window(vec!["other"]);
+        let main = SurfaceIndex::main();
+        let original_main = dock.capture_surface_identity(main).unwrap();
+        let original_other = dock.capture_surface_identity(other).unwrap();
+
+        let json = serde_json::to_string(&dock).unwrap();
+        assert!(!json.contains("identity"));
+        let mut restored: DockState<&str> = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.current_surface_identity(main), None);
+        assert_eq!(restored.current_surface_identity(other), None);
+        assert_ne!(restored.capture_surface_identity(main), Some(original_main));
+        assert_ne!(restored.capture_surface_identity(other), Some(original_other));
+        assert!(restored.find_tab(&"main").is_some());
+        assert!(restored.find_tab(&"other").is_some());
+    }
+
     #[test]
     fn indexed_tree_mutation_invalidates_only_its_surface_slot() {
         let mut dock = DockState::new(vec!["main"]);

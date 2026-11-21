@@ -811,6 +811,62 @@ mod tests {
     }
 
     #[test]
+    fn pointer_frames_reject_replacement_before_group_drop() {
+        use egui::{Event, PointerButton, RawInput, pos2};
+
+        let ctx = egui::Context::default();
+        let mut dock = DockState::new(vec!["original"]);
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        let mut viewer = Viewer { allow_windows: true };
+        let source = {
+            let mut area = DockArea::new(&mut dock);
+            area.group_drag_source(root).unwrap()
+        };
+        let pointer = pos2(50.0, 40.0);
+        let mut frame = |events: Vec<Event>| {
+            let input = RawInput {
+                events,
+                ..Default::default()
+            };
+            ctx.run(input, |_ctx| {});
+        };
+
+        // The original press and subsequent movement occur in separate egui frames.
+        frame(vec![
+            Event::PointerMoved(pointer),
+            Event::PointerButton {
+                pos: pointer,
+                button: PointerButton::Primary,
+                pressed: true,
+                modifiers: egui::Modifiers::NONE,
+            },
+        ]);
+        assert!(ctx.input(|i| i.pointer.primary_down()));
+        frame(vec![Event::PointerMoved(pos2(100.0, 40.0))]);
+        assert!(ctx.input(|i| i.pointer.primary_down()));
+
+        // Application code replaces the leaf while the pointer remains held.
+        *dock.main_surface_mut() = crate::Tree::new(vec!["replacement"]);
+        {
+            let mut area = DockArea::new(&mut dock);
+            assert!(!area.drag_source_valid(source, &mut viewer));
+            assert!(!area.apply_move(
+                source,
+                TabDestination::Node(root, TabInsert::Append),
+                &mut viewer,
+            ));
+        }
+        frame(vec![Event::PointerButton {
+            pos: pos2(100.0, 40.0),
+            button: PointerButton::Primary,
+            pressed: false,
+            modifiers: egui::Modifiers::NONE,
+        }]);
+        assert!(!ctx.input(|i| i.pointer.primary_down()));
+        assert_eq!(dock[root].tabs().unwrap(), &["replacement"]);
+    }
+
+    #[test]
     fn group_identity_rejects_a_leaf_relocated_to_another_path() {
         let mut dock = DockState::new(vec!["original"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());

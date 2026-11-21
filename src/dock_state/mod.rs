@@ -662,16 +662,17 @@ impl<Tab> DockState<Tab> {
         tab_viewer: &mut impl TabViewer<Tab = Tab>,
     ) -> Result<OnCloseResponse> {
         // Reject invalid paths before granting mutable access to the slot.
-        self.leaf(path.node_path())?
+        let tab = self.leaf(path.node_path())?
             .tabs
             .get(path.tab.0)
             .ok_or(Error::InvalidTab)?;
-        let leaf = self.leaf_mut(path.node_path())?;
-        let tab = &mut leaf.tabs[path.tab.0];
+        // is_closeable only borrows the tab immutably. A veto must not
+        // invalidate the destination identity or grant mutable access.
         if !tab_viewer.is_closeable(tab) {
             return Ok(OnCloseResponse::Ignore);
         }
-        let response = tab_viewer.on_close(tab);
+        let leaf = self.leaf_mut(path.node_path())?;
+        let response = tab_viewer.on_close(&mut leaf.tabs[path.tab.0]);
         match response {
             OnCloseResponse::Close => {
                 self.remove_tab(path);

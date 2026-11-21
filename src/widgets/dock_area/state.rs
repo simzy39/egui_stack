@@ -19,6 +19,14 @@ pub(super) struct GroupPress {
     pub source: DragSource,
 }
 
+impl GroupPress {
+    /// A different handle or a replacement leaf must never inherit this gesture.
+    pub(super) fn matches(self, widget: Id, path: NodePath, leaf_id: u64) -> bool {
+        self.widget == widget
+            && self.source == DragSource::Group { path, id: leaf_id }
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub(super) struct State {
     pub drag_start: Option<Pos2>,
@@ -133,8 +141,11 @@ mod retained_source_tests {
             id: 7,
         };
         let press = GroupPress { widget: Id::new("original"), source };
-        assert_ne!(press.widget, Id::new("replacement"));
-        assert_eq!(press.source, source);
+        let root = NodePath::new(SurfaceIndex::main(), crate::NodeIndex::root());
+        assert!(press.matches(Id::new("original"), root, 7));
+        assert!(!press.matches(Id::new("replacement"), root, 7));
+        assert!(!press.matches(Id::new("original"), root, 8));
+        assert!(!press.matches(Id::new("original"), NodePath::new(SurfaceIndex::main(), crate::NodeIndex(1)), 7));
     }
 
     #[test]

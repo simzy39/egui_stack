@@ -1884,10 +1884,10 @@ impl<Tab> DockArea<'_, Tab> {
             .get_or_insert_with(|| Self::press_origin(ui, pointer_pos));
         let delta = pointer_pos - start;
         if self.drag_activated(delta) {
-            let Some(GroupPress { widget: original_widget, source: DragSource::Group { path: original, id } }) = state.group_press else {
+            let Some(press @ GroupPress { source: DragSource::Group { id, .. }, .. }) = state.group_press else {
                 return;
             };
-            if original_widget != widget || original != path || !self.group_source_valid(path, id) {
+            if !press.matches(widget, path, id) || !self.group_source_valid(path, id) {
                 self.cancel_tab_drag(ui, state);
                 return;
             }

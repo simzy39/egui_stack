@@ -1044,6 +1044,22 @@ mod test {
     use super::*;
 
     #[test]
+    fn splitting_ancestor_of_source_keeps_other_branches() {
+        let mut dock = DockState::new(vec!["source"]);
+        let [left, _right] = dock.main_surface_mut().split_right(
+            NodeIndex::root(), 0.5, vec!["other"],
+        );
+        let source = TabPath::new(SurfaceIndex::main(), left, TabIndex(0));
+        let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        assert!(dock.move_tab(
+            source,
+            TabDestination::Node(root, TabInsert::Split(crate::Split::Below)),
+        ));
+        assert!(dock.find_tab(&"source").is_some());
+        assert!(dock.find_tab(&"other").is_some());
+    }
+
+    #[test]
     fn splitting_another_leaf_keeps_source_cleanup_and_destination_intact() {
         let mut dock = DockState::new(vec!["source"]);
         let [left, right] = dock.main_surface_mut().split_right(

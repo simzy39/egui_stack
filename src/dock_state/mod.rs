@@ -356,18 +356,25 @@ impl<Tab> DockState<Tab> {
     /// assert_eq!(leaf.tabs, ["a", "b", "c", "d", "e"]);
     /// assert_eq!(leaf.active, TabIndex(3));
     /// ```
-    pub fn move_node(&mut self, src: NodePath, dst: impl Into<TabDestination>) -> bool {
-        let dst = dst.into();
-        // Validate both endpoints before removing anything from the source.
-        let destination_valid = match dst {
+    /// Whether a destination can accept a move without clamping a stale tab index.
+    pub(crate) fn valid_move_destination(&self, destination: &TabDestination) -> bool {
+        match *destination {
             TabDestination::Node(path, TabInsert::Split(_)) => self.node(path).is_ok(),
-            TabDestination::Node(path, _) => self.leaf(path).is_ok(),
+            TabDestination::Node(path, TabInsert::Insert(index)) => self
+                .leaf(path)
+                .is_ok_and(|leaf| index.0 <= leaf.tabs.len()),
+            TabDestination::Node(path, TabInsert::Append) => self.leaf(path).is_ok(),
             TabDestination::EmptySurface(surface) => self
                 .get_surface(surface)
                 .is_some_and(Surface::is_empty),
             TabDestination::Window(_) => true,
-        };
-        if !destination_valid {
+        }
+    }
+
+    pub fn move_node(&mut self, src: NodePath, dst: impl Into<TabDestination>) -> bool {
+        let dst = dst.into();
+        // Validate both endpoints before removing anything from the source.
+        if !self.valid_move_destination(&dst) {
             return false;
         }
         if matches!(dst, TabDestination::Node(d, _) if d == src) {
@@ -445,15 +452,7 @@ impl<Tab> DockState<Tab> {
         if self.leaf(src.node_path()).is_err_or(|leaf| src.tab.0 >= leaf.tabs.len()) {
             return false;
         }
-        let destination_valid = match destination {
-            TabDestination::Node(path, TabInsert::Split(_)) => self.node(path).is_ok(),
-            TabDestination::Node(path, _) => self.leaf(path).is_ok(),
-            TabDestination::EmptySurface(surface) => self
-                .get_surface(surface)
-                .is_some_and(Surface::is_empty),
-            TabDestination::Window(_) => true,
-        };
-        if !destination_valid {
+        if !self.valid_move_destination(&destination) {
             return false;
         }
         match destination {

@@ -449,22 +449,7 @@ impl<Tab> DockArea<'_, Tab> {
 
     /// Whether a destination still refers to a usable surface or leaf.
     pub(super) fn destination_valid(&self, destination: &TabDestination) -> bool {
-        match *destination {
-            TabDestination::Node(path, TabInsert::Split(_)) => {
-                self.dock_state.node(path).is_ok()
-            }
-            TabDestination::Node(path, ref insert) => {
-                self.dock_state.leaf(path).is_ok_and(|leaf| match insert {
-                    TabInsert::Insert(index) => index.0 <= leaf.tabs.len(),
-                    _ => true,
-                })
-            }
-            TabDestination::EmptySurface(surface) => self
-                .dock_state
-                .get_surface(surface)
-                .is_some_and(Surface::is_empty),
-            TabDestination::Window(_) => true,
-        }
+        self.dock_state.valid_move_destination(destination)
     }
 
     /// Moves `src`, a tab or a whole leaf, to `destination`, once: unless the source or the

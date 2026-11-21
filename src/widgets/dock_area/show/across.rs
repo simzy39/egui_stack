@@ -776,6 +776,34 @@ mod tests {
     }
 
     #[test]
+    fn moved_group_cannot_reuse_its_source_identity() {
+        let mut dock = DockState::new(vec!["original", "other"]);
+        dock.main_surface_mut()
+            .split_right(NodeIndex::root(), 0.5, vec!["destination"]);
+        let source_path = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
+        let target_path = NodePath::new(SurfaceIndex::main(), NodeIndex(2));
+        let mut viewer = Viewer { allow_windows: true };
+        let mut area = DockArea::new(&mut dock);
+        let source = area.group_drag_source(source_path).unwrap();
+
+        assert!(area.apply_move(
+            source,
+            TabDestination::Node(target_path, TabInsert::Append),
+            &mut viewer,
+        ));
+        assert!(!area.drag_source_valid(source, &mut viewer));
+        assert!(!area.apply_move(
+            source,
+            TabDestination::Node(target_path, TabInsert::Append),
+            &mut viewer,
+        ));
+        assert_eq!(
+            area.dock_state.leaf(target_path).unwrap().tabs,
+            ["destination", "original", "other"],
+        );
+    }
+
+    #[test]
     fn empty_group_cannot_be_moved_after_its_tabs_are_removed() {
         let mut dock = DockState::new(vec!["original"]);
         dock.main_surface_mut()

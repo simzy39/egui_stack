@@ -1455,3 +1455,72 @@ pub(crate) fn remove_empty_docks<Tab>(state: &mut DockState<Tab>, docks: &mut Ve
         !removed
     });
 }
+
+#[cfg(test)]
+mod detach_tests {
+    use super::*;
+    use crate::{NodeIndex, TabIndex};
+
+    fn float_rect() -> Rect {
+        Rect::from_min_size(egui::pos2(20.0, 30.0), egui::vec2(400.0, 300.0))
+    }
+
+    fn id(tab: &mut &'static str) -> Id {
+        Id::new(*tab)
+    }
+
+    #[test]
+    fn invalid_detach_does_not_register_float_or_change_origins() {
+        let mut space = DockSpace::new();
+        let surface = space.add_dock("editor", DockRules::default(), vec!["one", "two"]);
+        let original_next = space.floating.next;
+        let original_docks = space.docks.len();
+        let bad = TabPath::new(surface, NodeIndex::root(), TabIndex(99));
+        assert!(detach(
+            &mut space.state, &mut space.docks, &mut space.origins,
+            &mut space.floating, Detach::Tab(bad), float_rect(), None,
+            FloatHost::InWindow, &mut id,
+        ).is_none());
+        assert_eq!(space.docks.len(), original_docks);
+        assert_eq!(space.floating.next, original_next);
+        assert!(space.floating.pending.is_empty());
+        assert!(space.origins.is_empty());
+        assert_eq!(space.state[surface][NodeIndex::root()].tabs_count(), 2);
+    }
+
+    #[test]
+    fn detach_tab_commits_origin_and_float_together() {
+        let mut space = DockSpace::new();
+        let surface = space.add_dock("editor", DockRules::default(), vec!["one", "two"]);
+        let path = TabPath::new(surface, NodeIndex::root(), TabIndex(0));
+        let name = detach(
+            &mut space.state, &mut space.docks, &mut space.origins,
+            &mut space.floating, Detach::Tab(path), float_rect(), None,
+            FloatHost::InWindow, &mut id,
+        ).expect("valid tab should detach");
+        let target = space.dock_surface(&name).expect("float dock registered");
+        assert_eq!(space.state[target][NodeIndex::root()].tabs_count(), 1);
+        assert_eq!(space.state[surface][NodeIndex::root()].tabs_count(), 1);
+        assert_eq!(space.origins.len(), 1);
+        assert_eq!(space.origins[0].tab, Id::new("one"));
+        assert_eq!(space.origins[0].dock, "editor");
+        assert_eq!(space.floating.pending.len(), 1);
+    }
+
+    #[test]
+    fn detach_group_preserves_each_tabs_origin() {
+        let mut space = DockSpace::new();
+        let surface = space.add_dock("editor", DockRules::default(), vec!["one", "two"]);
+        let node = NodePath::new(surface, NodeIndex::root());
+        let name = detach(
+            &mut space.state, &mut space.docks, &mut space.origins,
+            &mut space.floating, Detach::Group(node), float_rect(), None,
+            FloatHost::InWindow, &mut id,
+        ).expect("valid group should detach");
+        let target = space.dock_surface(&name).unwrap();
+        assert_eq!(space.state[target][NodeIndex::root()].tabs_count(), 2);
+        assert_eq!(space.origins.len(), 2);
+        assert!(space.origins.iter().all(|origin| origin.dock == "editor"));
+        assert_eq!(space.floating.pending.len(), 1);
+    }
+}

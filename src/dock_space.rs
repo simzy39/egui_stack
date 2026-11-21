@@ -1144,12 +1144,19 @@ impl<Tab> DockSpace<Tab> {
     /// [`remove_dock`](Self::remove_dock)) calls it on the new space before drawing it, so that
     /// its open native windows, the drag in progress and the events not taken yet go on.
     ///
-    /// Carried over: the floats' host, their windows' builders and viewports, the tabs moved
-    /// out waiting for their float, the events, the drag in progress (dropped if what it drags
-    /// is not at the same place in the new space), and the tabs' origins this space does not
-    /// record itself. Not carried over: the id; give the new space the old one's
-    /// ([`with_id`](Self::with_id)), as the floats' areas and move handles are keyed by it.
-    /// `old` keeps its docks and tabs, and no float state.
+    /// Transfers float configuration and unconsumed events. Pending opens and window metadata
+    /// are retained only for floating docks that still exist in the replacement space.
+    /// A drag session is retained only when its source still matches the replacement state.
+    /// Existing origin records in the replacement take precedence over transferred records.
+    ///
+    /// The replacement layout is authoritative: this method does not recreate removed docks
+    /// or restore their tabs. It replaces the destination's floating runtime state rather
+    /// than merging two simultaneously active float managers. Call it while rebuilding the
+    /// space, before drawing the new layout, not to combine independent spaces.
+    ///
+    /// The space ID is not transferred. Preserve it with [`with_id`](Self::with_id) so
+    /// viewport and drag handles retain their identity. The old space keeps its docks and
+    /// tabs but loses its floating runtime state and saved origins.
     pub fn carry_floats_from(&mut self, old: &mut DockSpace<Tab>) {
         let mut floating = std::mem::take(&mut old.floating);
         if floating
@@ -1506,6 +1513,44 @@ mod detach_tests {
 
     fn id(tab: &mut &'static str) -> Id {
         Id::new(*tab)
+    }
+
+    #[test]
+    fn carrying_origins_prefers_replacement_and_deduplicates_transferred_records() {
+        let mut old = DockSpace::<&'static str>::new();
+        old.origins.push(TabOrigin::new(Id::new("shared"), "old", None, None));
+        old.origins.push(TabOrigin::new(Id::new("new"), "first", None, None));
+        old.origins.push(TabOrigin::new(Id::new("new"), "duplicate", None, None));
+        let mut replacement = DockSpace::<&'static str>::new();
+        replacement.origins.push(TabOrigin::new(Id::new("shared"), "replacement", None, None));
+
+        replacement.carry_floats_from(&mut old);
+
+        assert!(old.origins.is_empty());
+        assert_eq!(replacement.origins.len(), 2);
+        assert_eq!(replacement.origins[0].dock, "replacement");
+        assert_eq!(replacement.origins[1].dock, "first");
+    }
+
+    #[test]
+    fn carried_pending_float_for_surviving_float_dock_is_preserved() {
+        let mut old = DockSpace::<&'static str>::new();
+        let mut replacement = DockSpace::<&'static str>::new();
+        replacement.add_dock("editor", DockRules::default(), vec!["one"]);
+        // A float dock is a normal dock surface with floating ownership.
+        replacement.add_dock("float-1", DockRules::default(), vec!["floating"]);
+        let index = replacement.dock_index("float-1").unwrap();
+        replacement.docks[index].floating = true;
+        old.floating.pending.push(PendingFloat {
+            dock: "float-1".to_owned(),
+            rect: float_rect(),
+            physical: None,
+            tabs: vec![Id::new("floating")],
+            host: FloatHost::InWindow,
+        });
+        replacement.carry_floats_from(&mut old);
+        assert_eq!(replacement.floating.pending.len(), 1);
+        assert_eq!(replacement.floating.pending[0].dock, "float-1");
     }
 
     #[test]

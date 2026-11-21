@@ -105,6 +105,13 @@ impl DragSession {
         }
     }
 
+    /// A report is current for the source's present or immediately preceding pass.
+    fn report_is_current(&self, viewport: ViewportId, report: &Report) -> bool {
+        viewport != self.source
+            && report.stamp <= self.pass
+            && self.pass - report.stamp <= 1
+    }
+
     /// The report of another viewport a release in the source goes by: the freshest reports
     /// (made during the source's last two passes) of the viewports under the pointer, the
     /// highest rank first. Inside the source, only a native float over the main window counts:
@@ -113,8 +120,7 @@ impl DragSession {
         self.reports
             .iter()
             .filter(|(viewport, report)| {
-                **viewport != self.source
-                    && report.stamp.saturating_add(1) >= self.pass
+                self.report_is_current(**viewport, report)
                     && (self.outside || (source_rank == 0 && report.rank > 0))
             })
             .map(|(_, report)| report)
@@ -130,7 +136,7 @@ impl DragSession {
         let over = self
             .reports
             .iter()
-            .filter(|(_, report)| report.stamp.saturating_add(1) >= self.pass)
+            .filter(|(viewport, report)| self.report_is_current(**viewport, report))
             .max_by_key(|(_, report)| report.rank)
             .map(|(viewport, _)| *viewport)
             .filter(|_| self.outside || self.remote(0).is_some());
@@ -204,6 +210,27 @@ mod recency_tests {
         });
         assert!(drag.remote(0).is_some());
         assert_eq!(drag.dragged().unwrap().over, Some(remote));
+    }
+
+    #[test]
+    fn future_and_source_reports_cannot_claim_remote_hover() {
+        let mut drag = session();
+        drag.pass = 5;
+        drag.outside = true;
+        drag.reports.insert(drag.source, Report {
+            stamp: 5,
+            rank: 100,
+            outcome: Outcome::Refused,
+            unfold: None,
+        });
+        drag.reports.insert(ViewportId::from_hash_of("future"), Report {
+            stamp: 6,
+            rank: 50,
+            outcome: Outcome::Refused,
+            unfold: None,
+        });
+        assert!(drag.remote(0).is_none());
+        assert!(drag.dragged().unwrap().over.is_none());
     }
 
     #[test]

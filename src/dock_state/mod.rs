@@ -416,9 +416,11 @@ impl<Tab> DockState<Tab> {
     ///
     /// Returns `Err` if the `path` is invalid or the node at the `path` is not a leaf.
     pub fn leaf_mut(&mut self, path: NodePath) -> Result<&mut LeafNode<Tab>> {
-        self.node_mut(path)?
+        // A non-leaf lookup must not invalidate an otherwise unchanged slot.
+        self.leaf(path)?;
+        Ok(self.node_mut(path)?
             .get_leaf_mut()
-            .ok_or(Error::NonLeafNode)
+            .expect("validated leaf node"))
     }
 
     /// Sets the currently focused leaf to `path` if the node at `path` is a leaf.

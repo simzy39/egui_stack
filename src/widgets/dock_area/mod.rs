@@ -258,11 +258,12 @@ impl BodyLeaf {
     ) -> Option<(DragSource, Id)> {
         let pending = data.get_temp::<(u64, Option<DragSource>, Id)>(key)?;
         let (stored_pass, source, widget) = pending;
-        if stored_pass != pass || source?.component() != drag_and_drop::TreeComponent::Node(path) {
+        let source = source?;
+        if stored_pass != pass || source.component() != drag_and_drop::TreeComponent::Node(path) {
             return None;
         }
         data.remove_temp::<(u64, Option<DragSource>, Id)>(key);
-        Some((source?, widget))
+        Some((source, widget))
     }
 
     fn id() -> Id {
@@ -282,6 +283,56 @@ impl BodyLeaf {
 #[cfg(test)]
 mod custom_handle_request_tests {
     use super::*;
+
+    #[test]
+    fn press_and_activation_requests_are_independent_and_area_scoped() {
+        use crate::{NodeIndex, SurfaceIndex};
+        let ctx = Context::default();
+        let left = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
+        let source = DragSource::Group { path: left, id: 17 };
+        let handle = Id::new("handle");
+        let area_a = Id::new("area-a");
+        let area_b = Id::new("area-b");
+        let press_a = BodyLeaf::press_id(area_a);
+        let drag_a = BodyLeaf::request_id(area_a);
+        let press_b = BodyLeaf::press_id(area_b);
+
+        ctx.data_mut(|data| {
+            BodyLeaf::retain_first_request(data, press_a, 4, (Some(source), handle));
+            BodyLeaf::retain_first_request(data, drag_a, 4, (Some(source), handle));
+            BodyLeaf::retain_first_request(data, press_b, 4, (Some(source), handle));
+            assert_eq!(
+                BodyLeaf::take_request_for_leaf(data, press_a, 4, left),
+                Some((source, handle)),
+            );
+            assert_eq!(
+                BodyLeaf::take_request_for_leaf(data, drag_a, 4, left),
+                Some((source, handle)),
+            );
+            assert_eq!(
+                BodyLeaf::take_request_for_leaf(data, press_b, 4, left),
+                Some((source, handle)),
+            );
+        });
+    }
+
+    #[test]
+    fn request_without_a_source_cannot_be_consumed() {
+        use crate::{NodeIndex, SurfaceIndex};
+        let ctx = Context::default();
+        let key = BodyLeaf::press_id(Id::new("dock"));
+        let path = NodePath::new(SurfaceIndex::main(), NodeIndex::root());
+        ctx.data_mut(|data| {
+            BodyLeaf::retain_first_request(data, key, 5, (None, Id::new("invalid")));
+            assert_eq!(BodyLeaf::take_request_for_leaf(data, key, 5, path), None);
+            assert!(data.get_temp::<(u64, Option<DragSource>, Id)>(key).is_some());
+            BodyLeaf::retain_first_request(data, key, 6, (None, Id::new("next")));
+            assert_eq!(
+                data.get_temp::<(u64, Option<DragSource>, Id)>(key),
+                Some((6, None, Id::new("next"))),
+            );
+        });
+    }
 
     #[test]
     fn only_the_matching_leaf_can_consume_a_current_pass_request() {

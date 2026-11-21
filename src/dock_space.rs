@@ -1280,10 +1280,13 @@ pub(crate) fn detach<Tab>(
         return None;
     }
     let ids: Vec<Id> = tabs.clone().map(|i| id_of(&mut leaf.tabs[i])).collect();
+    // Stage restoration metadata: a rejected move must leave the existing
+    // origin records and dock registry unchanged.
+    let mut pending_origins = origins.clone();
     if !from_float {
         for i in tabs {
             let path = TabPath::new(node.surface, node.node, crate::TabIndex(i));
-            record_origin(state, docks, origins, path, id_of);
+            record_origin(state, docks, &mut pending_origins, path, id_of);
         }
     }
     let name = loop {
@@ -1304,10 +1307,16 @@ pub(crate) fn detach<Tab>(
         floating: true,
         zone: None,
     });
-    match source {
+    let moved = match source {
         Detach::Tab(path) => state.move_tab(path, crate::TabDestination::EmptySurface(surface)),
         Detach::Group(path) => state.move_node(path, crate::TabDestination::EmptySurface(surface)),
+    };
+    if !moved {
+        docks.pop();
+        state.remove_surface(surface);
+        return None;
     }
+    *origins = pending_origins;
     floating.pending.push(PendingFloat {
         dock: name.clone(),
         rect,

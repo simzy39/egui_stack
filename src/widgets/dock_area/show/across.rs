@@ -1228,6 +1228,36 @@ mod tests {
     }
 
     #[test]
+    fn group_drag_rejects_reused_leaf_index_after_tree_restructure() {
+        let mut dock = DockState::new(vec!["original"]);
+        let [left, right] = dock.main_surface_mut().split_right(
+            NodeIndex::root(), 0.5, vec!["other"],
+        );
+        let source_path = NodePath::new(SurfaceIndex::main(), left);
+        let destination = NodePath::new(SurfaceIndex::main(), right);
+        let mut viewer = Viewer { allow_windows: true };
+        let mut area = DockArea::new(&mut dock);
+        let source = area.group_drag_source(source_path).unwrap();
+        assert!(area.drag_source_valid(source, &mut viewer));
+        // Rebuilding a tree may reuse exactly the same node index. A valid
+        // path alone must never authorize the old drag against the new leaf.
+        *area.dock_state.main_surface_mut() = crate::Tree::new(vec!["replacement"]);
+        let [new_left, new_right] = area.dock_state.main_surface_mut().split_right(
+            NodeIndex::root(), 0.5, vec!["new target"],
+        );
+        assert_eq!(left, new_left);
+        assert_eq!(right, new_right);
+        assert!(!area.drag_source_valid(source, &mut viewer));
+        assert!(!area.apply_move(
+            source,
+            TabDestination::Node(destination, TabInsert::Append),
+            &mut viewer,
+        ));
+        assert_eq!(area.dock_state[source_path].tabs().unwrap(), &["replacement"]);
+        assert_eq!(area.dock_state[destination].tabs().unwrap(), &["new target"]);
+    }
+
+    #[test]
     fn cross_viewport_session_rejects_replaced_group_before_release() {
         let mut dock = DockState::new(vec!["original"]);
         let root = NodePath::new(SurfaceIndex::main(), NodeIndex::root());

@@ -474,6 +474,28 @@ mod custom_handle_request_tests {
     }
 
     #[test]
+    fn rejected_request_does_not_consume_the_owners_pending_request() {
+        use crate::{NodeIndex, SurfaceIndex};
+        let ctx = Context::default();
+        let key = BodyLeaf::press_id(Id::new("dock"));
+        let owner = NodePath::new(SurfaceIndex::main(), NodeIndex(1));
+        let other = NodePath::new(SurfaceIndex::main(), NodeIndex(2));
+        let source = DragSource::Group { path: owner, id: 123 };
+        let widget = Id::new("owner-handle");
+
+        ctx.data_mut(|data| {
+            BodyLeaf::retain_first_request(data, key, 10, (Some(source), widget));
+            assert_eq!(BodyLeaf::take_request_for_leaf(data, key, 10, other), None);
+            assert_eq!(BodyLeaf::take_request_for_leaf(data, key, 11, owner), None);
+            assert_eq!(
+                BodyLeaf::take_request_for_leaf(data, key, 10, owner),
+                Some((source, widget)),
+            );
+            assert_eq!(BodyLeaf::take_request_for_leaf(data, key, 10, owner), None);
+        });
+    }
+
+    #[test]
     fn consumed_request_allows_next_handle_in_same_pass() {
         let ctx = Context::default();
         let key = BodyLeaf::press_id(Id::new("dock"));

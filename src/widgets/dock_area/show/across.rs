@@ -752,6 +752,58 @@ mod tests {
     }
 
     #[test]
+    fn origin_records_change_only_after_successful_move() {
+        let mut space = DockSpace::new();
+        space.add_dock("main", DockRules::default(), vec!["first", "second"]);
+        space.add_dock("other", DockRules::default(), vec!["target"]);
+        let main = space.dock_surface("main").unwrap();
+        let other = space.dock_surface("other").unwrap();
+        let rect = Rect::from_min_size(Pos2::ZERO, egui::vec2(300.0, 200.0));
+        let key = space.float_out(
+            TabPath::new(other, NodeIndex::root(), TabIndex(0)),
+            rect,
+            |tab| Id::unique(*tab),
+        ).unwrap();
+        let float_surface = space.dock_surface(&key).unwrap();
+        let path = TabPath::new(main, NodeIndex::root(), TabIndex(0));
+        let mut viewer = Viewer { allow_windows: true };
+        {
+            let mut area = DockArea::dock(&mut space, "main");
+            let source = DragSource::Tab {
+                path,
+                id: area.tab_identity(path, &mut viewer).unwrap(),
+            };
+            assert!(!area.apply_move(
+                source,
+                TabDestination::Node(
+                    NodePath::new(float_surface, NodeIndex(999)),
+                    TabInsert::Append,
+                ),
+                &mut viewer,
+            ));
+        }
+        assert!(space.origin(Id::unique("first")).is_none());
+        {
+            let mut area = DockArea::dock(&mut space, "main");
+            let source = DragSource::Tab {
+                path,
+                id: area.tab_identity(path, &mut viewer).unwrap(),
+            };
+            assert!(area.apply_move(
+                source,
+                TabDestination::Node(
+                    NodePath::new(float_surface, NodeIndex::root()),
+                    TabInsert::Append,
+                ),
+                &mut viewer,
+            ));
+        }
+        let origin = space.origin(Id::unique("first")).expect("successful move records origin");
+        assert_eq!(origin.dock, "main");
+        assert_eq!(origin.after, Some(Id::unique("second")));
+    }
+
+    #[test]
     fn destination_validation_accepts_vacant_surface_and_rejects_occupied_surface() {
         let mut dock = DockState::new(vec!["first"]);
         let mut area = DockArea::new(&mut dock);
